@@ -5,6 +5,28 @@
 #include <string.h>
 
 int main(int argc, char *argv[]) {
+
+    FILE *file;
+    char ip_address[20];
+    
+    // Ouvre le fichier en mode lecture
+    file = fopen("adresse_ip.txt", "r");
+
+    // Vérifie si le fichier a été ouvert avec succès
+    if (file == NULL) {
+        printf("Erreur lors de l'ouverture du fichier.\n");
+        return 1;
+    }
+
+    // Lit l'adresse IP à partir du fichier
+    if (fgets(ip_address, 20, file) != NULL) {
+        printf("Adresse IP récupérée depuis le fichier : %s\n", ip_address);
+    } else {
+        printf("Erreur lors de la lecture du fichier.\n");
+    }
+
+    // Ferme le fichier
+    fclose(file);
   
   printf("Début programme\n");
 
@@ -15,7 +37,7 @@ int main(int argc, char *argv[]) {
   struct sockaddr_in ad;
   ad.sin_family = AF_INET;
   ad.sin_addr.s_addr = INADDR_ANY ;
-  ad.sin_port = htons(atoi(argv[1])) ;
+  ad.sin_port = htons(atoi("1234")) ;
   int res = bind(dS, (struct sockaddr*)&ad, sizeof(ad));
   printf("res : %d\n", res);
   printf("Socket Nommé\n");
