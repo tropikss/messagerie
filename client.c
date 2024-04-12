@@ -31,7 +31,7 @@ int main(int argc, char *argv[]) {
 
     int r;
     recv(dS, &r, sizeof(int), 0) ;
-    printf("Réponse reçue : %d\n", r) ;
+    printf("Réponse reçue : %s\n", r) ;
   }
   
 
