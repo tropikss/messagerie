@@ -2,6 +2,8 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <stdlib.h>
+#include <unistd.h>
+
 #include <string.h>
 
 int main(int argc, char *argv[]) {
@@ -15,7 +17,10 @@ int main(int argc, char *argv[]) {
   inet_pton(AF_INET,argv[1],&(aS.sin_addr)) ;
   aS.sin_port = htons(atoi(argv[2])) ;
   socklen_t lgA = sizeof(struct sockaddr_in) ;
-  connect(dS, (struct sockaddr *) &aS, lgA) ;
+  if(connect(dS, (struct sockaddr *) &aS, lgA) == -1) {
+    printf("Pas de serveur trouvé\n");
+    exit(1);
+  }
   printf("Socket Connecté\n");
 
   while (1) {
@@ -29,8 +34,8 @@ int main(int argc, char *argv[]) {
     send(dS, chaine1, strlen(chaine1)+1 , 0) ;
     printf("Message Envoyé \n");
 
-    int r;
-    recv(dS, &r, sizeof(int), 0) ;
+    char * r = (char*)malloc(32);
+    recv(dS, &r, sizeof(r), 0) ;
     printf("Réponse reçue : %s\n", r) ;
   }
   

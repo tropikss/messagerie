@@ -37,7 +37,7 @@ int main(int argc, char *argv[]) {
   struct sockaddr_in ad;
   ad.sin_family = AF_INET;
   ad.sin_addr.s_addr = INADDR_ANY ;
-  ad.sin_port = htons(atoi("1234")) ;
+  ad.sin_port = htons(atoi("1234")) ; // PORT SERVEUR
   int res = bind(dS, (struct sockaddr*)&ad, sizeof(ad));
   printf("res : %d\n", res);
   printf("Socket Nommé\n");
