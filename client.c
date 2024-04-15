@@ -23,23 +23,39 @@ int main(int argc, char *argv[]) {
   }
   printf("Socket Connecté\n");
 
-  while (1) {
-    char * chaine1 = (char*)malloc(32);
-    printf("Entrez votre message (tapez 'fin' pour quitter):");
-    fgets(chaine1,32,stdin);
+  int role;
+  recv(dS, &role, sizeof(role), 0);
 
-    if (strncmp(chaine1, "fin", 4) == 0)
-      break;
+  if(role == 0) {
+    printf("Je suis le premier client\n");
+  } else {
+    printf("Je suis le deuxieme client\n");
+  }
 
-    send(dS, chaine1, strlen(chaine1)+1 , 0) ;
-    printf("Message Envoyé \n");
+  int actif = 1;
+  int MSG_SIZE = 32;
 
-    char * r = (char*)malloc(32);
-    recv(dS, &r, sizeof(r), 0) ;
-    printf("Réponse reçue : %s\n", r) ;
+  while (actif) {
+
+    if(role == 0) {
+      char *msg = (char*)malloc(MSG_SIZE);
+      printf("< ");
+      fgets(msg, MSG_SIZE, stdin);
+      if(send(dS, msg, MSG_SIZE, 0) != -1) {
+        recv(dS, &actif, sizeof(int), 0);
+        role = 1;
+      } else {
+        printf("erreur envoi\n");
+      }
+    } else {
+      char *msg = (char*)malloc(MSG_SIZE);
+      recv(dS, msg, MSG_SIZE, 0);
+      recv(dS, &actif, sizeof(int), 0);
+      printf("> %s", msg);
+      role = 0;
+    }
   }
   
-
   shutdown(dS,2) ;
-  printf("Fin du programme");
+  printf("Fin du programme\n");
 }

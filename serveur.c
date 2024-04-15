@@ -4,29 +4,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+int msg_send(int dS, char * msg, int size) {
+  return(send(dS, msg, size, 0) == size);
+}
+
 int main(int argc, char *argv[]) {
-
-    FILE *file;
-    char ip_address[20];
-    
-    // Ouvre le fichier en mode lecture
-    file = fopen("adresse_ip.txt", "r");
-
-    // Vérifie si le fichier a été ouvert avec succès
-    if (file == NULL) {
-        printf("Erreur lors de l'ouverture du fichier.\n");
-        return 1;
-    }
-
-    // Lit l'adresse IP à partir du fichier
-    if (fgets(ip_address, 20, file) != NULL) {
-        printf("Adresse IP récupérée depuis le fichier : %s\n", ip_address);
-    } else {
-        printf("Erreur lors de la lecture du fichier.\n");
-    }
-
-    // Ferme le fichier
-    fclose(file);
   
   printf("Début programme\n");
 
@@ -37,9 +19,12 @@ int main(int argc, char *argv[]) {
   struct sockaddr_in ad;
   ad.sin_family = AF_INET;
   ad.sin_addr.s_addr = INADDR_ANY ;
-  ad.sin_port = htons(atoi("1234")) ; // PORT SERVEUR
+  ad.sin_port = htons(atoi(argv[1])) ; // PORT SERVEUR
   int res = bind(dS, (struct sockaddr*)&ad, sizeof(ad));
-  printf("res : %d\n", res);
+  if(res == -1) {
+    perror("Erreur bind");
+    exit(1);
+  }
   printf("Socket Nommé\n");
 
   listen(dS, 7) ;
@@ -50,65 +35,49 @@ int main(int argc, char *argv[]) {
 
   struct sockaddr_in sock_client2 ;
   socklen_t lg2 = sizeof(struct sockaddr_in) ;
-  
-  int rep_client1 = accept(dS, (struct sockaddr*) &sock_client1,&lg1) ;
-  if(rep_client1 == 0) {
-    printf("Client 1 connecté");
+
+  int client1 = accept(dS, (struct sockaddr*) &sock_client1,&lg1) ;
+  if(client1 > 0) {
+    printf("Client 1 connecté\n");
+    int premier = 0;
+    send(client1, &premier, sizeof(int), 0); // on transmet a 1 qu'il enverra en premier
   }
 
-  int rep_client2 = accept(dS, (struct sockaddr*) &sock_client2,&lg2) ;
-    if(rep_client2 == 0) {
-    printf("Client 2 connecté");
-  }
+  int client2 = accept(dS, (struct sockaddr*) &sock_client2,&lg2);
+    if(client2 > 0) {
+      printf("Client 2 connecté\n\n");
+      int deuxieme = 1;
+      send(client2, &deuxieme, sizeof(int), 0); // on transmet a 1 qu'il envvera en premier
+    }
 
   int actif = 1;
-  
-  char msg [50];
-  memset(msg, 0, sizeof(msg));
-  char r [10] = "recu";
+  int MSG_SIZE = 32;
+  char *msg = (char*)malloc(MSG_SIZE);
+  int sender = client1;
+  int receiver = client2;
 
   while(actif) {
 
-    // de 1 a 2
-
-    memset(msg, 0, sizeof(msg)); // clear de msg
-
-    recv(rep_client1, msg, sizeof(msg), 0) ; // on attend le message de 1
-    printf("message recu : %s", msg);
-    if(msg == "fin") {
-        printf("fin conversation");
-        break;
+    msg = (char*)malloc(MSG_SIZE);
+    recv(sender, msg, MSG_SIZE, 0);
+    printf("> %s",msg);
+    if(send(receiver, msg, MSG_SIZE, 0) != -1) {
+      if(strcmp(msg, "fin\n\0") == 0) {
+        actif = 0;
+      }
+      send(sender, &actif, sizeof(int), 0);
+      send(receiver, &actif, sizeof(int), 0);
+    } else {
+      printf("erreur envoi\n");
     }
-    send(rep_client2, &msg, sizeof(msg), 0); // on le transmet a 2
-    printf("message renvoyee");
 
-    recv(rep_client2, msg, sizeof(msg), 0) ; // on attend la reponse de 2
-    printf("reponse recu : %s", msg);
-    send(rep_client1, &msg, sizeof(msg), 0); // qu'on transmet a 1
-    printf("reponse renvoyee");
-
-    // de 2 a 1
-
-    memset(msg, 0, sizeof(msg)); // clear de msg
-
-    recv(rep_client2, msg, sizeof(msg), 0) ; // on attend le message de 2
-    printf("message recu : %s", msg);
-    if(msg == "fin") {
-        printf("fin conversation");
-        break;
-    }
-    send(rep_client1, &msg, sizeof(msg), 0); // on le transmet a 1
-    printf("message reenvoye");
-
-    recv(rep_client1, msg, sizeof(msg), 0) ; // on attend la reponse de 1
-    printf("reponse recu : %s", msg);
-    send(rep_client2, &msg, sizeof(msg), 0); // qu'on transmet a 2
-    printf("reponse reenvoyee");
-
+    int temp = sender;
+    sender = receiver;
+    receiver = temp;
   }
 
-  shutdown(rep_client1, 2) ; 
-  shutdown(rep_client2, 2) ;
+  shutdown(client1, 2) ; 
+  shutdown(client2, 2) ;
   shutdown(dS, 2) ;
   printf("Fin du programme\n");
 }
