@@ -1,83 +1,93 @@
 #include <stdio.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <pthread.h>
 
-// Vous pouvez lancer le programme avec "./serveur.sh", c'est un programme qui attribue automatiquement
-// un nouveau port a serveur et client, bien sur le meme entre eux
+#define MSG_SIZE 500
+#define MAX_CLIENTS 2
+
+int client_sockets[MAX_CLIENTS];
+pthread_t client_threads[MAX_CLIENTS];
+
+// Fonction pour relayer les messages entre les clients
+void *relay_messages(void *arg) {
+    int sender_index = *((int *) arg);
+    int receiver_index = (sender_index + 1) % MAX_CLIENTS;
+
+    char message[MSG_SIZE];
+    int bytes_received;
+
+    while ((bytes_received = recv(client_sockets[sender_index], message, MSG_SIZE, 0)) > 0) {
+        message[bytes_received] = '\0';
+
+        send(client_sockets[receiver_index], message, strlen(message), 0);
+    }
+
+    // Si le client se déconnecte, fermer le socket et arrêter le thread
+    close(client_sockets[sender_index]);
+    client_sockets[sender_index] = -1;
+    printf("Client %d disconnected.\n", sender_index + 1);
+
+    return NULL;
+}
 
 int main(int argc, char *argv[]) {
-  
-  printf("Début programme\n");
-
-  int dS = socket(PF_INET, SOCK_STREAM, 0);
-  printf("Socket Créé\n");
-
-
-  struct sockaddr_in ad;
-  ad.sin_family = AF_INET;
-  ad.sin_addr.s_addr = INADDR_ANY ;
-  ad.sin_port = htons(atoi(argv[1])) ; // PORT SERVEUR
-  int res = bind(dS, (struct sockaddr*)&ad, sizeof(ad));
-  if(res == -1) {
-    perror("Erreur bind");
-    exit(1);
-  }
-  printf("Socket Nommé\n");
-
-  listen(dS, 7) ;
-  printf("Mode écoute\n");
-
-  struct sockaddr_in sock_client1 ;
-  socklen_t lg1 = sizeof(struct sockaddr_in) ;
-
-  struct sockaddr_in sock_client2 ;
-  socklen_t lg2 = sizeof(struct sockaddr_in) ;
-
-  int client1 = accept(dS, (struct sockaddr*) &sock_client1,&lg1) ; // on recupere le client 1 
-  if(client1 > 0) {
-    printf("Client 1 connecté\n");
-    int premier = 0;
-    send(client1, &premier, sizeof(int), 0); // on transmet a 1 qu'il enverra en premier
-  }
-
-  int client2 = accept(dS, (struct sockaddr*) &sock_client2,&lg2); // on recupere le client 2
-    if(client2 > 0) {
-      printf("Client 2 connecté\n\n");
-      int deuxieme = 1;
-      send(client2, &deuxieme, sizeof(int), 0); // on transmet a 1 qu'il envvera en premier
+    if (argc != 2) {
+        printf("Usage: %s <port>\n", argv[0]);
+        return EXIT_FAILURE;
     }
 
-  int actif = 1;
-  int MSG_SIZE = 32;
-  char *msg = (char*)malloc(MSG_SIZE);
-
-  int sender = client1; // personne qui enverra en premier, ici client1 par default
-  int receiver = client2; // pareil amis client 2 et recevoir
-
-  while(actif) {
-
-    msg = (char*)malloc(MSG_SIZE);
-    recv(sender, msg, MSG_SIZE, 0);
-    printf("> %s",msg);
-    if(send(receiver, msg, MSG_SIZE, 0) != -1) { // si l'envoi n'echoue pas
-      if(strcmp(msg, "fin\n\0") == 0) { // si le message recu vaut "fin", y'avait \n et \0 finalement a la fin
-        actif = 0; // si y'a fin alors on arrete tout
-      }
-      send(sender, &actif, sizeof(int), 0); // et on envoie au deux client d'arreter aussi
-      send(receiver, &actif, sizeof(int), 0);
-    } else {
-      printf("erreur envoi\n");
+    int server_socket = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_socket == -1) {
+        perror("socket");
+        return EXIT_FAILURE;
     }
 
-    int temp = sender; // on stocke le sender le temps de la reatribution
-    sender = receiver; // et on echange l'envoyeur et le receveur
-    receiver = temp;
-  }
+    struct sockaddr_in server_address;
+    server_address.sin_family = AF_INET;
+    server_address.sin_addr.s_addr = INADDR_ANY;
+    server_address.sin_port = htons(atoi(argv[1]));
 
-  shutdown(client1, 2) ; 
-  shutdown(client2, 2) ;
-  shutdown(dS, 2) ;
-  printf("Fin du programme\n");
+    if (bind(server_socket, (struct sockaddr *) &server_address, sizeof(server_address)) == -1) {
+        perror("bind");
+        close(server_socket);
+        return EXIT_FAILURE;
+    }
+
+    if (listen(server_socket, MAX_CLIENTS) == -1) {
+        perror("listen");
+        close(server_socket);
+        return EXIT_FAILURE;
+    }
+
+    printf("Server listening on port %s...\n", argv[1]);
+
+    // Accepter les connexions des clients
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        struct sockaddr_in client_address;
+        socklen_t client_address_len = sizeof(client_address);
+        client_sockets[i] = accept(server_socket, (struct sockaddr *) &client_address, &client_address_len);
+        if (client_sockets[i] == -1) {
+            perror("accept");
+            close(server_socket);
+            return EXIT_FAILURE;
+        }
+        printf("Client %d connected.\n", i + 1);
+
+        // Créer un thread pour chaque client
+        int *client_index_ptr = malloc(sizeof(int));
+        *client_index_ptr = i;
+        pthread_create(&client_threads[i], NULL, relay_messages, client_index_ptr);
+    }
+
+    // Attendre la fin de tous les threads clients
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        pthread_join(client_threads[i], NULL);
+    }
+
+    close(server_socket);
+    return EXIT_SUCCESS;
 }

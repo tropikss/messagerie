@@ -1,66 +1,75 @@
 #include <stdio.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
 #include <stdlib.h>
-#include <unistd.h>
-
 #include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <pthread.h>
 
-// pareil que pour "serveur.sh", faites "./client.sh", ca recupere automatiquement votre IP (pour les tests)
-// et ca attribue tout seul un nouveau port
+#define MSG_SIZE 500
+
+int client_socket;
+
+// Fonction pour recevoir et afficher les messages du serveur
+void *receive_message(void *arg) {
+    while (1) {
+        char message[MSG_SIZE];
+        int bytes_received = recv(client_socket, message, MSG_SIZE, 0);
+        if (bytes_received <= 0) {
+            printf("Server disconnected.\n");
+            break;
+        }
+        message[bytes_received] = '\0';
+        printf("< %s", message);
+    }
+    return NULL;
+}
+
+// Fonction pour la saisie et l'envoi de messages au serveur
+void *send_message(void *arg) {
+    while (1) {
+        char message[MSG_SIZE];
+        printf("> ");
+        fgets(message, MSG_SIZE, stdin);
+        send(client_socket, message, strlen(message), 0);
+    }
+    return NULL;
+}
 
 int main(int argc, char *argv[]) {
-
-  printf("Début programme\n");
-  int dS = socket(PF_INET, SOCK_STREAM, 0);
-  printf("Socket Créé\n");
-
-  struct sockaddr_in aS;
-  aS.sin_family = AF_INET;
-  inet_pton(AF_INET,argv[1],&(aS.sin_addr)) ;
-  aS.sin_port = htons(atoi(argv[2])) ;
-  socklen_t lgA = sizeof(struct sockaddr_in) ;
-
-  if(connect(dS, (struct sockaddr *) &aS, lgA) == -1) { // tentative connexion au serveur
-    printf("Pas de serveur trouvé\n"); // echec
-    exit(1);
-  }
-  printf("Socket Connecté\n"); // reussite
-
-  int role;
-  recv(dS, &role, sizeof(role), 0); // on recupere le role du client, 0 = envoi en premier, 1 = ecoute en premier
-
-  if(role == 0) {
-    printf("Je suis le premier client\n");
-  } else {
-    printf("Je suis le deuxieme client\n");
-  }
-
-  int actif = 1; // actif : etat du client
-  int MSG_SIZE = 32; // tailel des msg envoyé, a changer pa la suitep our mettre un truc variable qu'on recupere de puis le serveur
-
-  while (actif) {
-
-    if(role == 0) { // envoi
-      char *msg = (char*)malloc(MSG_SIZE);
-      printf("< ");
-      fgets(msg, MSG_SIZE, stdin);
-      if(send(dS, msg, MSG_SIZE, 0) != -1) { // si le send n'echoue pas
-        recv(dS, &actif, sizeof(int), 0); // on met dans actif le retour du serveur -> c'est le serveur
-        // qui determine si on doit arreter la connexion ou pas, donc le serveur renvoie l'etat que doit avoir actif du client
-        role = 1; // on change les roles, le sender devient receiver et inversemment
-      } else {
-        printf("erreur envoi\n");
-      }
-    } else {
-      char *msg = (char*)malloc(MSG_SIZE);
-      recv(dS, msg, MSG_SIZE, 0); // on recupere le message
-      recv(dS, &actif, sizeof(int), 0); // et pareil, on modifie actif suivant la reponse serveur
-      printf("> %s", msg);
-      role = 0; // on change les roles
+    if (argc != 3) {
+        printf("Usage: %s <server_ip> <server_port>\n", argv[0]);
+        return EXIT_FAILURE;
     }
-  }
-  
-  shutdown(dS,2) ;
-  printf("Fin du programme\n");
+
+    client_socket = socket(AF_INET, SOCK_STREAM, 0);
+    if (client_socket == -1) {
+        perror("socket");
+        return EXIT_FAILURE;
+    }
+
+    struct sockaddr_in server_address;
+    server_address.sin_family = AF_INET;
+    server_address.sin_addr.s_addr = inet_addr(argv[1]);
+    server_address.sin_port = htons(atoi(argv[2]));
+
+    if (connect(client_socket, (struct sockaddr *) &server_address, sizeof(server_address)) == -1) {
+        perror("connect");
+        close(client_socket);
+        return EXIT_FAILURE;
+    }
+
+    printf("Connected to server. Start typing messages...\n");
+
+    // Création des threads pour la réception et l'envoi de messages
+    pthread_t receive_tid, send_tid;
+    pthread_create(&receive_tid, NULL, receive_message, NULL);
+    pthread_create(&send_tid, NULL, send_message, NULL);
+
+    // Attente de la fin des threads
+    pthread_join(receive_tid, NULL);
+    pthread_join(send_tid, NULL);
+
+    close(client_socket);
+    return EXIT_SUCCESS;
 }
