@@ -8,6 +8,8 @@
 #include <unistd.h>
 
 #define MSG_SIZE 32
+#define MAX_CLIENT 3
+#define MAX_NOM 20
 
 // Vous pouvez lancer le programme avec "./serveur.sh", c'est un programme qui attribue automatiquement
 // un nouveau port au serveur et au client, bien sur le meme entre eux
@@ -20,6 +22,14 @@ void sigHandler(int signo) {
 }
 
 typedef struct {
+  int *tab_client_client;
+  pthread_mutex_t *mutex_client;
+  int id_client;
+  int *tab_size;
+  char *nom;
+} client;
+
+typedef struct {
   int type;
   union {
     int i;
@@ -27,33 +37,45 @@ typedef struct {
   } info;
 } data;
 
-typedef struct {
-  int client1;
-  int client2;
-} Couple;
-
-void* msg_link(void* args) {
-  Couple* thread_args = (Couple*)args;
-  int sender = thread_args->client1;
-  int receiver = thread_args->client2;
+void* new_client(void* args) {
   data send_data;
 
   char * msg = (char*)malloc(MSG_SIZE);
+  client* data_client = (client*)args;
+  int id_client = data_client->id_client;
+  int *tab_client = data_client->tab_client_client;
+  int *tab_size = data_client->tab_size;
+  pthread_mutex_t *mutex_client = data_client->mutex_client;
+  char *nom = data_client->nom;
+
   int state = 1;
 
   while(state) {
-    recv(sender, msg, MSG_SIZE, 0);
-    printf("> %s",msg);
+    recv(id_client, msg, MSG_SIZE, 0);
+    printf("%s: %s",nom,msg);
     send_data.type = 1;
     strncpy(send_data.info.msg, msg, MSG_SIZE);
-    send(receiver, &send_data, sizeof(data), 0);
+
+    pthread_mutex_lock(mutex_client);
+    for(int i = 0; i < *tab_size; i++) {
+      if(tab_client[i] != id_client) {
+        send(tab_client[i], &send_data, sizeof(data), 0);
+      }
+    }
+    pthread_mutex_unlock(mutex_client);
 
     state = strcmp(msg, "fin\n\0"); // si y'a fin alors on arrete tout
   }
+
   send_data.type = 0;
   send_data.info.i = 0;
-  send(receiver, &send_data, sizeof(data), 0);
-  send(sender, &send_data, sizeof(data), 0);
+
+  pthread_mutex_lock(mutex_client);
+  for(int i = 0; i < *tab_size; i++) {
+    send(tab_client[i], &send_data, sizeof(data), 0);
+  }
+  pthread_mutex_unlock(mutex_client);
+
   pthread_kill(pthread_self(), SIGUSR1);
 
   return NULL;
@@ -65,7 +87,6 @@ int main(int argc, char *argv[]) {
 
   int dS = socket(PF_INET, SOCK_STREAM, 0);
   printf("Socket Créé\n");
-
 
   struct sockaddr_in ad;
   ad.sin_family = AF_INET;
@@ -81,35 +102,21 @@ int main(int argc, char *argv[]) {
   listen(dS, 7) ;
   printf("Mode écoute\n");
 
-  struct sockaddr_in sock_client1 ;
-  socklen_t lg1 = sizeof(struct sockaddr_in) ;
+  int state = 1;
+  int *nb_client = (int*)malloc(sizeof(int));
+  *nb_client = 0;
 
-  struct sockaddr_in sock_client2 ;
-  socklen_t lg2 = sizeof(struct sockaddr_in) ;
+  int *tab_client = (int*)malloc(MAX_CLIENT * sizeof(int)); // création du tableau d'id client
+  pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
-  int client1 = accept(dS, (struct sockaddr*) &sock_client1,&lg1) ; // on recupere le client 1 
-  if(client1 > 0) {
-    printf("Client 1 connecté\n");
-  }
+  pthread_t *tab_thread = (pthread_t*)malloc(MAX_CLIENT * sizeof(pthread_t));
 
-  int client2 = accept(dS, (struct sockaddr*) &sock_client2,&lg2); // on recupere le client 2
-    if(client2 > 0) {
-      printf("Client 2 connecté\n\n");
-    }
+  struct sockaddr_in sock_client;
+  socklen_t lg = sizeof(struct sockaddr_in);
 
-  int actif = 1;
-  char *msg = (char*)malloc(MSG_SIZE);
-
-  Couple link1;
-  link1.client1 = client1;
-  link1.client2 = client2;
-
-  Couple link2;
-  link2.client1 = client2;
-  link2.client2 = client1;
-
-  pthread_t thread_client1;
-  pthread_t thread_client2;
+  client *shared_client = (client*)malloc(sizeof(client));
+  shared_client->mutex_client = &mutex;
+  shared_client->tab_client_client = tab_client;
 
   struct sigaction sa;
   sa.sa_handler = sigHandler;
@@ -117,20 +124,41 @@ int main(int argc, char *argv[]) {
   sa.sa_flags = 0;
   sigaction(SIGUSR1, &sa, NULL);
 
-  if(pthread_create(&thread_client1, NULL, msg_link, (void*)&link1) != 0) {
-    printf("erreur thread 1\n");
-    exit(1);
+  printf("Initialisation réussie\n");
+  
+  while(state) {
+    int request = accept(dS, (struct sockaddr*) &sock_client, &lg); // on attend une connexion
+    printf("Demande connexion\n");
+    if(*nb_client < MAX_CLIENT) { 
+      if(request > 0) { // on vérifie que la connexion s'est bien faite
+        printf("Connexion possible\n");
+
+        pthread_mutex_lock(&mutex);
+        tab_client[*nb_client] = request;
+        printf("Client %d connecté ", *nb_client+1);
+        shared_client->id_client = request;
+        shared_client->tab_size = nb_client;
+        *nb_client += 1;
+        char *nom = (char*)malloc(MAX_NOM * sizeof(char));
+        sprintf(nom, "client n%d", *nb_client);
+        shared_client->nom = nom;
+
+        pthread_mutex_unlock(&mutex);
+        
+        if(pthread_create(&tab_thread[*nb_client], NULL, new_client, shared_client) != 0) {
+          printf("avec erreur\n");
+        } else {
+          printf("avec succès\n");
+        }
+      } else {
+        printf("Erreur connexion\n");
+      }
+    } else {
+      printf("Nombre maximal de client deja atteint, request refusé\n");
+      shutdown(request, 2);
+    }
   }
 
-  if(pthread_create(&thread_client2, NULL, msg_link, (void*)&link2) != 0) {
-    printf("erreur thread 2\n");
-    exit(1);
-  }
-
-  pause();
-
-  shutdown(client1, 2); 
-  shutdown(client2, 2);
   shutdown(dS, 2) ;
   printf("Fin du programme\n");
 }
