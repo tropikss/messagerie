@@ -3,9 +3,61 @@
 #include <arpa/inet.h>
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
+#include <signal.h>
+#include <unistd.h>
+
+#define MSG_SIZE 32
 
 // Vous pouvez lancer le programme avec "./serveur.sh", c'est un programme qui attribue automatiquement
-// un nouveau port a serveur et client, bien sur le meme entre eux
+// un nouveau port au serveur et au client, bien sur le meme entre eux
+
+void sigHandler(int signo) {
+    if (signo == SIGUSR1) {
+        printf("Au moins un des threads s'est terminé\n");
+        exit(EXIT_SUCCESS);
+    }
+}
+
+typedef struct {
+  int type;
+  union {
+    int i;
+    char msg[MSG_SIZE];
+  } info;
+} data;
+
+typedef struct {
+  int client1;
+  int client2;
+} Couple;
+
+void* msg_link(void* args) {
+  Couple* thread_args = (Couple*)args;
+  int sender = thread_args->client1;
+  int receiver = thread_args->client2;
+  data send_data;
+
+  char * msg = (char*)malloc(MSG_SIZE);
+  int state = 1;
+
+  while(state) {
+    recv(sender, msg, MSG_SIZE, 0);
+    printf("> %s",msg);
+    send_data.type = 1;
+    strncpy(send_data.info.msg, msg, MSG_SIZE);
+    send(receiver, &send_data, sizeof(data), 0);
+
+    state = strcmp(msg, "fin\n\0"); // si y'a fin alors on arrete tout
+  }
+  send_data.type = 0;
+  send_data.info.i = 0;
+  send(receiver, &send_data, sizeof(data), 0);
+  send(sender, &send_data, sizeof(data), 0);
+  pthread_kill(pthread_self(), SIGUSR1);
+
+  return NULL;
+}
 
 int main(int argc, char *argv[]) {
   
@@ -38,46 +90,47 @@ int main(int argc, char *argv[]) {
   int client1 = accept(dS, (struct sockaddr*) &sock_client1,&lg1) ; // on recupere le client 1 
   if(client1 > 0) {
     printf("Client 1 connecté\n");
-    int premier = 0;
-    send(client1, &premier, sizeof(int), 0); // on transmet a 1 qu'il enverra en premier
   }
 
   int client2 = accept(dS, (struct sockaddr*) &sock_client2,&lg2); // on recupere le client 2
     if(client2 > 0) {
       printf("Client 2 connecté\n\n");
-      int deuxieme = 1;
-      send(client2, &deuxieme, sizeof(int), 0); // on transmet a 1 qu'il envvera en premier
     }
 
   int actif = 1;
-  int MSG_SIZE = 32;
   char *msg = (char*)malloc(MSG_SIZE);
 
-  int sender = client1; // personne qui enverra en premier, ici client1 par default
-  int receiver = client2; // pareil amis client 2 et recevoir
+  Couple link1;
+  link1.client1 = client1;
+  link1.client2 = client2;
 
-  while(actif) {
+  Couple link2;
+  link2.client1 = client2;
+  link2.client2 = client1;
 
-    msg = (char*)malloc(MSG_SIZE);
-    recv(sender, msg, MSG_SIZE, 0);
-    printf("> %s",msg);
-    if(send(receiver, msg, MSG_SIZE, 0) != -1) { // si l'envoi n'echoue pas
-      if(strcmp(msg, "fin\n\0") == 0) { // si le message recu vaut "fin", y'avait \n et \0 finalement a la fin
-        actif = 0; // si y'a fin alors on arrete tout
-      }
-      send(sender, &actif, sizeof(int), 0); // et on envoie au deux client d'arreter aussi
-      send(receiver, &actif, sizeof(int), 0);
-    } else {
-      printf("erreur envoi\n");
-    }
+  pthread_t thread_client1;
+  pthread_t thread_client2;
 
-    int temp = sender; // on stocke le sender le temps de la reatribution
-    sender = receiver; // et on echange l'envoyeur et le receveur
-    receiver = temp;
+  struct sigaction sa;
+  sa.sa_handler = sigHandler;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = 0;
+  sigaction(SIGUSR1, &sa, NULL);
+
+  if(pthread_create(&thread_client1, NULL, msg_link, (void*)&link1) != 0) {
+    printf("erreur thread 1\n");
+    exit(1);
   }
 
-  shutdown(client1, 2) ; 
-  shutdown(client2, 2) ;
+  if(pthread_create(&thread_client2, NULL, msg_link, (void*)&link2) != 0) {
+    printf("erreur thread 2\n");
+    exit(1);
+  }
+
+  pause();
+
+  shutdown(client1, 2); 
+  shutdown(client2, 2);
   shutdown(dS, 2) ;
   printf("Fin du programme\n");
 }

@@ -3,11 +3,57 @@
 #include <arpa/inet.h>
 #include <stdlib.h>
 #include <unistd.h>
-
 #include <string.h>
+#include <pthread.h>
+
+#define MSG_SIZE 32
 
 // pareil que pour "serveur.sh", faites "./client.sh", ca recupere automatiquement votre IP (pour les tests)
 // et ca attribue tout seul un nouveau port
+
+typedef struct {
+  int type;
+  union {
+    int i;
+    char msg[MSG_SIZE];
+  } info;
+} data;
+
+void* msg_recv(void* args) {
+    int* dS = (int*)args;
+    data recv_data;
+    char* msg = (char*)malloc(MSG_SIZE); 
+
+    while(1) {
+        recv(*dS, &recv_data, sizeof(data), 0);
+
+        if(recv_data.type == 0) { // int
+            pthread_exit(NULL);
+        } else if(recv_data.type == 1) { // char[]
+            // Copier le message de recv_data.info.msg dans msg
+            strncpy(msg, recv_data.info.msg, MSG_SIZE);
+            printf("> %s", msg); // Imprimer le message
+        }
+    }
+
+    free(msg);
+    return NULL;
+}
+
+void* msg_send(void* args) {
+
+  int* dS = (int*)args;
+  char *msg = (char*)malloc(MSG_SIZE);
+
+  while(1) {
+    msg = (char*)malloc(MSG_SIZE);
+
+    printf("< ");
+    fgets(msg, MSG_SIZE, stdin);
+    send(*dS, msg, MSG_SIZE, 0);
+  }
+  pthread_exit(NULL);
+}
 
 int main(int argc, char *argv[]) {
 
@@ -27,39 +73,21 @@ int main(int argc, char *argv[]) {
   }
   printf("Socket Connecté\n"); // reussite
 
-  int role;
-  recv(dS, &role, sizeof(role), 0); // on recupere le role du client, 0 = envoi en premier, 1 = ecoute en premier
+  pthread_t sender;
+  pthread_t receiver;
+  int state = 1;
+  data recv_data;
 
-  if(role == 0) {
-    printf("Je suis le premier client\n");
-  } else {
-    printf("Je suis le deuxieme client\n");
+  if(pthread_create(&sender, NULL, msg_send, (void*)&dS) != 0) {
+      printf("erreur thread sender\n");
   }
 
-  int actif = 1; // actif : etat du client
-  int MSG_SIZE = 32; // tailel des msg envoyé, a changer pa la suitep our mettre un truc variable qu'on recupere de puis le serveur
-
-  while (actif) {
-
-    if(role == 0) { // envoi
-      char *msg = (char*)malloc(MSG_SIZE);
-      printf("< ");
-      fgets(msg, MSG_SIZE, stdin);
-      if(send(dS, msg, MSG_SIZE, 0) != -1) { // si le send n'echoue pas
-        recv(dS, &actif, sizeof(int), 0); // on met dans actif le retour du serveur -> c'est le serveur
-        // qui determine si on doit arreter la connexion ou pas, donc le serveur renvoie l'etat que doit avoir actif du client
-        role = 1; // on change les roles, le sender devient receiver et inversemment
-      } else {
-        printf("erreur envoi\n");
-      }
-    } else {
-      char *msg = (char*)malloc(MSG_SIZE);
-      recv(dS, msg, MSG_SIZE, 0); // on recupere le message
-      recv(dS, &actif, sizeof(int), 0); // et pareil, on modifie actif suivant la reponse serveur
-      printf("> %s", msg);
-      role = 0; // on change les roles
-    }
+  if(pthread_create(&receiver, NULL, msg_recv, (void*)&dS) != 0) {
+      printf("erreur thread receiver\n");
   }
+
+  pthread_join(receiver, NULL);
+  pthread_cancel(sender);
   
   shutdown(dS,2) ;
   printf("Fin du programme\n");
