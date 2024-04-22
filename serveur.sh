@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/bash
 
 # Vérifier si le fichier port.txt existe
 if [ ! -f "port.txt" ]; then
@@ -9,8 +9,6 @@ else
     new_port=$((current_port + 1))
     echo "$new_port" > port.txt
 fi
-
-#!/bin/bash
 
 get_port_from_file() {
     if [ -f "port.txt" ]; then
