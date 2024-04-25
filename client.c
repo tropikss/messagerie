@@ -11,42 +11,55 @@
 // pareil que pour "serveur.sh", faites "./client.sh", ca recupere automatiquement votre IP (pour les tests)
 // et ca attribue tout seul un nouveau port
 
-typedef struct {
+typedef struct
+{
   int type;
-  union {
+  union
+  {
     int i;
     char msg[MSG_SIZE];
   } info;
 } data;
 
-void* msg_recv(void* args) {
-    int* dS = (int*)args;
-    data recv_data;
-    char* msg = (char*)malloc(MSG_SIZE); 
+void *msg_recv(void *args)
+{
+  int *dS = (int *)args;
+  data recv_data;
+  char *msg = (char *)malloc(MSG_SIZE);
 
-    while(1) {
-        recv(*dS, &recv_data, sizeof(data), 0);
+  while (1)
+  {
+    recv(*dS, &recv_data, sizeof(data), 0);
 
-        if(recv_data.type == 0) { // int
-            pthread_exit(NULL);
-        } else if(recv_data.type == 1) { // char[]
-            // Copier le message de recv_data.info.msg dans msg
-            strncpy(msg, recv_data.info.msg, MSG_SIZE);
-            printf("> %s", msg); // Imprimer le message
-        }
+    if (recv_data.type == 0)
+    { // int
+      pthread_exit(NULL);
     }
+    else if (recv_data.type == 1)
+    { // char[]
+      // Copier le message de recv_data.info.msg dans msg
+      if (strncpy(msg, recv_data.info.msg, MSG_SIZE) == NULL) // msg trop long par exemple
+      {
+        perror("Erreur lors de la copie du message");
+        exit(EXIT_FAILURE);
+      }
+      printf("> %s", msg); // Imprimer le message
+    }
+  }
 
-    free(msg);
-    return NULL;
+  free(msg);
+  return NULL;
 }
 
-void* msg_send(void* args) {
+void *msg_send(void *args)
+{
 
-  int* dS = (int*)args;
-  char *msg = (char*)malloc(MSG_SIZE);
+  int *dS = (int *)args;
+  char *msg = (char *)malloc(MSG_SIZE);
 
-  while(1) {
-    msg = (char*)malloc(MSG_SIZE);
+  while (1)
+  {
+    msg = (char *)malloc(MSG_SIZE);
 
     printf("< ");
     fgets(msg, MSG_SIZE, stdin);
@@ -55,19 +68,26 @@ void* msg_send(void* args) {
   pthread_exit(NULL);
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 
   printf("Début programme\n");
   int dS = socket(PF_INET, SOCK_STREAM, 0);
+  if (dS == -1)
+  {
+    perror("Erreur lors de la création de la socket");
+    exit(EXIT_FAILURE);
+  }
   printf("Socket Créé\n");
 
   struct sockaddr_in aS;
   aS.sin_family = AF_INET;
-  inet_pton(AF_INET,argv[1],&(aS.sin_addr)) ;
-  aS.sin_port = htons(atoi(argv[2])) ;
-  socklen_t lgA = sizeof(struct sockaddr_in) ;
+  inet_pton(AF_INET, argv[1], &(aS.sin_addr));
+  aS.sin_port = htons(atoi(argv[2]));
+  socklen_t lgA = sizeof(struct sockaddr_in);
 
-  if(connect(dS, (struct sockaddr *) &aS, lgA) == -1) { // tentative connexion au serveur
+  if (connect(dS, (struct sockaddr *)&aS, lgA) == -1) // tentative connexion au serveur
+  {
     printf("Pas de serveur trouvé\n"); // echec
     exit(1);
   }
@@ -78,17 +98,28 @@ int main(int argc, char *argv[]) {
   int state = 1;
   data recv_data;
 
-  if(pthread_create(&sender, NULL, msg_send, (void*)&dS) != 0) {
-      printf("erreur thread sender\n");
+  if (pthread_create(&sender, NULL, msg_send, (void *)&dS) != 0)
+  {
+    printf("erreur thread sender\n");
   }
 
-  if(pthread_create(&receiver, NULL, msg_recv, (void*)&dS) != 0) {
-      printf("erreur thread receiver\n");
+  if (pthread_create(&receiver, NULL, msg_recv, (void *)&dS) != 0)
+  {
+    printf("erreur thread receiver\n");
   }
 
-  pthread_join(receiver, NULL);
-  pthread_cancel(sender);
-  
-  shutdown(dS,2) ;
+  if (pthread_join(receiver, NULL) != 0)
+  {
+    printf("Erreur lors de l'attente du thread 'receiver'");
+    exit(EXIT_FAILURE);
+  }
+
+  if (pthread_cancel(sender) != 0)
+  {
+    perror("Erreur lors de l'annulation du thread 'sender'");
+    exit(EXIT_FAILURE);
+  }
+
+  shutdown(dS, 2);
   printf("Fin du programme\n");
 }
