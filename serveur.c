@@ -53,7 +53,8 @@ void* new_client(void* args) {
   while(state) {
     int taille;
     //reçoie la taille du message d'abord;
-    recv(id_client, &taille, MSG_SIZE, 0);
+    recv(id_client, &taille, sizeof(int), 0);
+    send_data.taille = taille;
 
     //J'alloue la taille du message
     char * msg = (char*)malloc(taille);
@@ -71,6 +72,8 @@ void* new_client(void* args) {
       }
     }
     pthread_mutex_unlock(mutex_client);
+
+    free(msg);
 
     state = strcmp(msg, "fin\n\0"); // si y'a fin alors on arrete tout
   }

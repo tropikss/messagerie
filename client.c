@@ -47,19 +47,19 @@ void* msg_send(void* args) {
   int* dS = (int*)args;
 
   while(1) {
-    char taille[32]; //taille max
-    //Demande la taille à envoyer
-    printf("Taille du message < ");
-    fgets(taille, MSG_SIZE, stdin);
-    char *msg = (char*)malloc(atoi(taille));//convertie string en int
+    int taille;
+
+    char *msg = (char*)malloc(MSG_SIZE);
 
     printf("< ");
     fgets(msg, MSG_SIZE, stdin);
-
+    taille = strlen(msg);
     //Envoie de la taille du message d'abord
     send(*dS, &taille, sizeof(int) , 0);
     //Puis envoie le message
     send(*dS, msg, sizeof(msg), 0);
+
+    free(msg);
   }
   pthread_exit(NULL);
 }
