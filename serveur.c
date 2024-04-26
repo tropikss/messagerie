@@ -73,9 +73,9 @@ void* new_client(void* args) {
     }
     pthread_mutex_unlock(mutex_client);
 
-    free(msg);
-
     state = strcmp(msg, "fin\n\0"); // si y'a fin alors on arrete tout
+
+    free(msg);
   }
 
   send_data.type = 0;
