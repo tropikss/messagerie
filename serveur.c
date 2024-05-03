@@ -43,46 +43,49 @@ typedef struct
   } info;
 } data;
 
-int envoyer_message_prive(client *clients, int nb_clients, const char *pseudo_dest, const char *message)
+int envoyer_message_prive(int *tab_client, int *nb_clients, char *pseudo, char *message)
 {
-  int i;
-  int destinataire_trouve = 0;
 
-  // Recherche du socket du destinataire à partir de son pseudo
-  for (i = 0; i < nb_clients; i++)
-  {
-    if (strcmp(clients[i].nom, pseudo_dest) == 0)
-    {
-      destinataire_trouve = 1;
-      int res = send(clients[i].id_client, message, strlen(message), 0);
-      if (res == -1)
-      {
-        return -1; // code d'erreur si l'envoie a échoué
-      }
-      printf("Envoi du message '%s' à %s\n", message, pseudo_dest);
-      break;
-    }
-  }
+  // int i;
+  // int destinataire_trouve = 0;
+  // printf("test");
+  // // Recherche du socket du destinataire à partir de son pseudo
+  // for (i = 0; i < &nb_clients; i++)
+  // {
+  //   printf("nom/mp 2 aaa client test %s",clients[i]);
+  //   if (strcmp(clients[i], pseudo_dest) == 0)
+  //   {
+  //     destinataire_trouve = 1;
+  //     if (send(clients[i], message, strlen(message), 0) == -1)
+  //     {
+  //       return -1; // code d'erreur si l'envoie a échoué
+  //     }
+  //     printf("Envoi du message '%s' à %s\n", message, pseudo_dest);
+  //     break;
+  //   }
+  // }
 
-  if (!destinataire_trouve)
-  {
-    printf("Utilisateur '%s' non trouvé.\n", pseudo_dest);
-    return -2; // code d'erreur pour indiquer que le destinataire n'a pas été trouvé
-  }
+  // if (!destinataire_trouve)
+  // {
+  //   printf("Utilisateur '%s' non trouvé.\n", pseudo_dest);
+  //   return -2; // code d'erreur pour indiquer que le destinataire n'a pas été trouvé
+  // }
   return 0; // tout s'est bien passé
 }
 
 void *new_client(void *args)
 {
-  data send_data;
+  data send_data; // pour envoyer des data
 
-  char *msg = (char *)malloc(MSG_SIZE);
-  client *data_client = (client *)args;
-  int id_client = data_client->id_client;
-  int *tab_client = data_client->tab_client_client;
-  int *tab_size = data_client->tab_size;
-  pthread_mutex_t *mutex_client = data_client->mutex_client;
-  char *nom = data_client->nom;
+  char *msg = (char *)malloc(MSG_SIZE); // allouer un endroit pour les msg
+
+  client *data_client = (client *)args; // prend shared_client et le met dans data_client
+
+  int id_client = data_client->id_client; // on prend l'id du client en cours
+  int *tab_client = data_client->tab_client_client; // pointeur vers le tableau d'id de clients
+  int *tab_size = data_client->tab_size; // size du tableau
+  pthread_mutex_t *mutex_client = data_client->mutex_client; // mutex du tab_client
+  char *nom = data_client->nom; // nom du client en cours
   char *pseudo;
   char *message; // Pour recupérer le message dans la commande /mp
 
@@ -103,7 +106,7 @@ void *new_client(void *args)
         printf("Message privé à : %s\n", pseudo);
         printf("Contenu du message : %s\n", message);
 
-        int resultat = envoyer_message_prive(data_client, *tab_size, pseudo, message);
+        int resultat = envoyer_message_prive(tab_client, tab_size, pseudo, message);
         if (resultat == -1) // l'envoi du mp a echoué
         {
           const char *msg_erreur_envoi = "Erreur : Echec de l'envoi du message privé.\n";
@@ -219,18 +222,18 @@ int main(int argc, char *argv[])
   *nb_client = 0;
 
   int *tab_client = (int *)malloc(MAX_CLIENT * sizeof(int)); // création du tableau d'id client
-  pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+  pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER; // mutex client
 
-  pthread_t *tab_thread = (pthread_t *)malloc(MAX_CLIENT * sizeof(pthread_t));
+  pthread_t *tab_thread = (pthread_t *)malloc(MAX_CLIENT * sizeof(pthread_t)); // tab des threads (des clients)
 
   struct sockaddr_in sock_client;
   socklen_t lg = sizeof(struct sockaddr_in);
 
-  client *shared_client = (client *)malloc(sizeof(client));
-  shared_client->mutex_client = &mutex;
+  client *shared_client = (client *)malloc(sizeof(client)); // structure qui contient l'adresse du mutex et l'adresse du tab_client
+  shared_client->mutex_client = &mutex; // on les associes dans shared_client
   shared_client->tab_client_client = tab_client;
 
-  struct sigaction sa;
+  struct sigaction sa; // signaux on s'en branle
   sa.sa_handler = sigHandler;
   sigemptyset(&sa.sa_mask);
   sa.sa_flags = 0;
@@ -241,7 +244,7 @@ int main(int argc, char *argv[])
 
   printf("Initialisation réussie\n");
 
-  while (state)
+  while (state) 
   {
     int request = accept(dS, (struct sockaddr *)&sock_client, &lg); // on attend une connexion
     printf("Demande connexion\n");
@@ -256,21 +259,23 @@ int main(int argc, char *argv[])
           printf("Erreur lors du verouillage du mutex");
         }
 
-        tab_client[*nb_client] = request;
+        tab_client[*nb_client] = request; // on ajoute le nouveau client a notre tab_client
         printf("Client %d connecté ", *nb_client + 1);
-        shared_client->id_client = request;
-        shared_client->tab_size = nb_client;
-        *nb_client += 1;
-        char *nom = (char *)malloc(MAX_NOM * sizeof(char));
-        sprintf(nom, "client n%d", *nb_client);
-        shared_client->nom = nom;
 
-        if (pthread_mutex_unlock(&mutex) != 0)
+        shared_client->id_client = request; // on dis quel client on va créer
+        shared_client->tab_size = nb_client; // on met a jour la tab client
+        *nb_client += 1; // on incrément la taille (après pour pouvoir utiliser tab_size directement sur nos tableaux)
+
+        char *nom = (char *)malloc(MAX_NOM * sizeof(char)); // on attribue un nom vde a la taille TAILLE_MAX
+        sprintf(nom, "client_%d", *nb_client); // le nom du client c'est client_1, client_2, client_3 etc ...
+        shared_client->nom = nom; // shared_client a son propre nom aussi
+
+        if (pthread_mutex_unlock(&mutex) != 0) // on unlock
         {
           printf("Erreur lors du dévereouillage du mutex");
         }
-
-        if (pthread_create(&tab_thread[*nb_client], NULL, new_client, shared_client) != 0)
+        // &tab_thread... on attribue
+        if (pthread_create(&tab_thread[*nb_client], NULL, new_client, shared_client) != 0) // on créer le thread client
         {
           printf("Erreur lors de la creation du thread\n");
         }
