@@ -31,6 +31,7 @@ typedef struct {
 
 typedef struct {
   int type;
+  int taille; //ajout de la taille du message pas généré par chatGPT :P MathisssEEEuuu (sais qu'il va même pas regardez mon code)
   union {
     int i;
     char msg[MSG_SIZE];
@@ -40,7 +41,6 @@ typedef struct {
 void* new_client(void* args) {
   data send_data;
 
-  char * msg = (char*)malloc(MSG_SIZE);
   client* data_client = (client*)args;
   int id_client = data_client->id_client;
   int *tab_client = data_client->tab_client_client;
@@ -51,6 +51,15 @@ void* new_client(void* args) {
   int state = 1;
 
   while(state) {
+    int taille;
+    //reçoie la taille du message d'abord;
+    recv(id_client, &taille, sizeof(int), 0);
+    send_data.taille = taille;
+
+    //J'alloue la taille du message
+    char * msg = (char*)malloc(taille);
+    
+    //puis reçoie le message du client
     recv(id_client, msg, MSG_SIZE, 0);
     printf("%s: %s",nom,msg);
     send_data.type = 1;
@@ -65,6 +74,8 @@ void* new_client(void* args) {
     pthread_mutex_unlock(mutex_client);
 
     state = strcmp(msg, "fin\n\0"); // si y'a fin alors on arrete tout
+
+    free(msg);
   }
 
   send_data.type = 0;
