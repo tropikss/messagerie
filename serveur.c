@@ -6,6 +6,7 @@
 #include <pthread.h>
 #include <signal.h>
 #include <unistd.h>
+#include <stdbool.h>
 
 #define MSG_SIZE 32
 #define MAX_CLIENT 3
@@ -42,6 +43,35 @@ typedef struct
   } info;
 } data;
 
+int envoyer_message_prive(client *clients, int nb_clients, const char *pseudo_dest, const char *message)
+{
+  int i;
+  int destinataire_trouve = 0;
+
+  // Recherche du socket du destinataire à partir de son pseudo
+  for (i = 0; i < nb_clients; i++)
+  {
+    if (strcmp(clients[i].nom, pseudo_dest) == 0)
+    {
+      destinataire_trouve = 1;
+      int res = send(clients[i].id_client, message, strlen(message), 0);
+      if (res == -1)
+      {
+        return -1; // code d'erreur si l'envoie a échoué
+      }
+      printf("Envoi du message '%s' à %s\n", message, pseudo_dest);
+      break;
+    }
+  }
+
+  if (!destinataire_trouve)
+  {
+    printf("Utilisateur '%s' non trouvé.\n", pseudo_dest);
+    return -2; // code d'erreur pour indiquer que le destinataire n'a pas été trouvé
+  }
+  return 0; // tout s'est bien passé
+}
+
 void *new_client(void *args)
 {
   data send_data;
@@ -53,6 +83,8 @@ void *new_client(void *args)
   int *tab_size = data_client->tab_size;
   pthread_mutex_t *mutex_client = data_client->mutex_client;
   char *nom = data_client->nom;
+  char *pseudo;
+  char *message; // Pour recupérer le message dans la commande /mp
 
   int state = 1;
 
@@ -60,34 +92,80 @@ void *new_client(void *args)
   {
     recv(id_client, msg, MSG_SIZE, 0);
     printf("%s: %s", nom, msg);
-    send_data.type = 1;
-    strncpy(send_data.info.msg, msg, MSG_SIZE);
 
-    if (pthread_mutex_lock(&mutex_client) != 0) // j'ai changer l'argument (avant : mutex_client) pour pouvoir comparé et traiter l'éventuelle erreur
+    // Vérification si le message commence par "/"
+    if (msg[0] == '/')
     {
-      printf("Erreur lors du verrouillage du mutex");
-      exit(EXIT_FAILURE);
-    }
-    for (int i = 0; i < *tab_size; i++)
-    {
-      if (tab_client[i] != id_client)
+      if (strstr(msg, "/mp ") == msg) // Vérifie si le message commence par "/mp "
       {
-        send(tab_client[i], &send_data, sizeof(data), 0);
+        pseudo = strtok(msg + 4, " "); // Récupère le nom de l'utilisateur après "/mp "
+        message = strtok(NULL, "");    // Récupère le reste du message comme le message à envoyer
+        printf("Message privé à : %s\n", pseudo);
+        printf("Contenu du message : %s\n", message);
+
+        int resultat = envoyer_message_prive(data_client, *tab_size, pseudo, message);
+        if (resultat == -1) // l'envoi du mp a echoué
+        {
+          const char *msg_erreur_envoi = "Erreur : Echec de l'envoi du message privé.\n";
+          send(id_client, msg_erreur_envoi, strlen(msg_erreur_envoi), 0);
+        }
+        if (resultat == -2) // le destinataire n'a pas été trouvé
+        {
+          const char *msg_erreur_dest = "Erreur : Le destinataire n'a pas été trouvé.\n";
+          send(id_client, msg_erreur_dest, strlen(msg_erreur_dest), 0);
+        }
+        if (resultat == 0) // l'envoi du message privé s'est bien passé
+        {
+          const char *msg_ok = "L'envoi du message privé s'est bien passé";
+          send(id_client, msg_ok, strlen(msg_ok), 0);
+        }
+      }
+      if (strcmp(msg, "/help\n\0"))
+      {
+        printf("Commandes disponibles :\n\n/mp <pseudo> message : Permet d'envoyé un message privé.\n/list : Liste des utilisateurs connectés.\n");
+      }
+      if (strcmp(msg, "/list\n\0"))
+      {
+        // Appel de la fonction qui va permettre d'afficher tous les utilisateurs en connectés
+        printf("Commande liste des utilisateurs en ligne");
+      }
+      else
+      {
+        printf("Ce n'est pas une commande connue");
       }
     }
-    if (pthread_mutex_unlock(&mutex_client) != 0)
+    else
     {
-      printf("Erreur lors du déverrouillage du mutex");
-      exit(EXIT_FAILURE);
-    }
+      // Si le message ne commence pas par "/", traiter comme un message normal
+      send_data.type = 1;
+      strncpy(send_data.info.msg, msg, MSG_SIZE);
 
-    state = strcmp(msg, "fin\n\0"); // si y'a fin alors on arrete tout
+      if (pthread_mutex_lock(mutex_client) != 0)
+      {
+        printf("Erreur lors du verrouillage du mutex");
+        exit(EXIT_FAILURE);
+      }
+      for (int i = 0; i < *tab_size; i++)
+      {
+        if (tab_client[i] != id_client)
+        {
+          send(tab_client[i], &send_data, sizeof(data), 0);
+        }
+      }
+      if (pthread_mutex_unlock(mutex_client) != 0)
+      {
+        printf("Erreur lors du déverrouillage du mutex");
+        exit(EXIT_FAILURE);
+      }
+
+      state = strcmp(msg, "fin\n\0"); // si y'a fin alors on arrete tout
+    }
   }
 
   send_data.type = 0;
   send_data.info.i = 0;
 
-  if (pthread_mutex_lock(&mutex_client) != 0)
+  if (pthread_mutex_lock(mutex_client) != 0)
   {
     printf("Erreur lors du verouillage du mutex");
   }
