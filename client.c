@@ -14,56 +14,53 @@
 typedef struct
 {
   int type;
-  union
-  {
+  int taille;
+  union {
     int i;
     char msg[MSG_SIZE];
   } info;
 } data;
 
-void *msg_recv(void *args)
-{
-  int *dS = (int *)args;
-  data recv_data;
-  char *msg = (char *)malloc(MSG_SIZE);
+void* msg_recv(void* args) {
+    int* dS = (int*)args;
+    data recv_data;
 
-  while (1)
-  {
-    recv(*dS, &recv_data, sizeof(data), 0);
+    while(1) {
+      recv(*dS, &recv_data, sizeof(data), 0);
+      //J'alloue la taille du message
+      char* msg = (char*)malloc(recv_data.taille); 
 
-    if (recv_data.type == 0)
-    { // int
-      pthread_exit(NULL);
-    }
-    else if (recv_data.type == 1)
-    { // char[]
+      if(recv_data.type == 0) { // int
+        pthread_exit(NULL);
+      } else if(recv_data.type == 1) { // char[]
       // Copier le message de recv_data.info.msg dans msg
-      if (strncpy(msg, recv_data.info.msg, MSG_SIZE) == NULL) // msg trop long par exemple
-      {
-        perror("Erreur lors de la copie du message");
-        exit(EXIT_FAILURE);
+        strncpy(msg, recv_data.info.msg, MSG_SIZE);
+        printf("> %s", recv_data.info.msg); // Imprimer le message
       }
-      printf("> %s", msg); // Imprimer le message
+      free(msg);
     }
-  }
-
-  free(msg);
-  return NULL;
+    return NULL;
 }
 
-void *msg_send(void *args)
-{
+void* msg_send(void* args) {
+  data send_data;
 
-  int *dS = (int *)args;
-  char *msg = (char *)malloc(MSG_SIZE);
+  int* dS = (int*)args;
 
-  while (1)
-  {
-    msg = (char *)malloc(MSG_SIZE);
+  while(1) {
+    int taille;
+
+    char *msg = (char*)malloc(MSG_SIZE);
 
     printf("< ");
     fgets(msg, MSG_SIZE, stdin);
-    send(*dS, msg, MSG_SIZE, 0);
+    taille = strlen(msg);
+    //Envoie de la taille du message d'abord
+    send(*dS, &taille, sizeof(int) , 0);
+    //Puis envoie le message
+    send(*dS, msg, sizeof(msg), 0);
+
+    free(msg);
   }
   pthread_exit(NULL);
 }
