@@ -157,8 +157,9 @@ char **get_name_and_message(char *s)
 }
 
 // Fonction qui envoie un message privé au destinateur
-void send_messagePRV(char *s, char *destinateur)
+void send_message_priv(char *s, char *destinateur, int uid)
 {
+  int receiver_exist = 0;
   pthread_mutex_lock(&clients_mutex);
   for (int i = 0; i < MAX_CLIENT; ++i)
   {
@@ -166,6 +167,7 @@ void send_messagePRV(char *s, char *destinateur)
     {
       if (strcmp(clientsTab[i]->nom, destinateur) == 0)
       {
+        receiver_exist = 1;
         if (write(clientsTab[i]->sockID, s, strlen(s)) < 0)
         {
           perror("ERREUR: Envoie du message échoué");
@@ -175,6 +177,11 @@ void send_messagePRV(char *s, char *destinateur)
     }
   }
   pthread_mutex_unlock(&clients_mutex);
+
+  if (receiver_exist == 0)
+  {
+    printf("Receiver does not exist\n");
+  }
 }
 
 // Gère la communication entre les clients (envoie et réception)
@@ -228,7 +235,11 @@ void *new_client(void *args)
         if (check_message(message) == 1) // c'est un message privé
         {
           char **info = get_name_and_message(message);
-          send_messagePRV(info[1], info[0]);
+          char concatenated[MSG_SIZE];
+          strcpy(concatenated, data_client->nom);
+          strcat(concatenated, ": ");
+          strcat(concatenated, info[1]);
+          send_message_priv(concatenated, info[0], data_client->id_client);
           int i;
           for (i = 0; i < strlen(message); i++)
           { // trim \n
