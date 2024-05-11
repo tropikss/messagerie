@@ -1,0 +1,5 @@
+Liste des Commandes
+/help : Affiche les Commandes
+/exit : Déconnecte le client qui execute la Commandes
+/mp [nom] <message> : envoie un message privé au pseudo spécifié
+/list : Affiche la liste des clients en ligne 

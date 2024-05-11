@@ -161,7 +161,7 @@ void *new_client(void *args)
         printf("%s -> %s\n", message, data_client->nom);
       }
     }
-    else if (receive == 0 || strcmp(message, "fin") == 0)
+    else if (receive == 0 || strcmp(message, "/exit") == 0)
     {
       sprintf(message, "%s a quitté le chat\n", data_client->nom);
       printf("%s", message);

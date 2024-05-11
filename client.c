@@ -12,9 +12,9 @@
 //------------------------------------------
 #define MSG_SIZE 100 // Taille max du message
 //------------------------------------------
-int flag = 0;        // Gestion du signal
-int dS = 0; // Descripteur de fichier du socket
-char nom[32];        // Nom du client
+int flag = 0; // Gestion du signal
+int dS = 0;   // Descripteur de fichier du socket
+char nom[32]; // Nom du client
 
 // pareil que pour "serveur.sh", faites "./client.sh", ca recupere automatiquement votre IP (pour les tests)
 // et ca attribue tout seul un nouveau port
@@ -23,6 +23,31 @@ char nom[32];        // Nom du client
 void catch_ctrl_c_and_exit(int sig)
 {
   flag = 1;
+}
+
+// Lecture du fichier texte
+void readFile()
+{
+  char *filename = "MANUEL.txt";
+  FILE *fp = fopen(filename, "r");
+
+  if (fp == NULL)
+  {
+    printf("Error: could not open file %s", filename);
+
+  }
+
+  // reading line by line, max 256 bytes
+  const unsigned MAX_LENGTH = 256;
+  char buffer[MAX_LENGTH];
+
+  while (fgets(buffer, MAX_LENGTH, fp))
+    printf("%s", buffer);
+  
+  printf("\n");
+  
+  // close the file
+  fclose(fp);
 }
 
 //***********************OUTDATE**************************
@@ -80,15 +105,18 @@ void msg_send()
         break;
       }
     }
-    if (strcmp(msg, "fin") == 0)
+    if (strcmp(msg, "/exit") == 0)
     {
       break;
+    }
+    else if (strcmp(msg, "/help") == 0)
+    {
+      readFile();
     }
     else
     {
       sprintf(buffer, "%s: %s\n", nom, msg);
       send(dS, buffer, strlen(buffer), 0);
-      printf("Test\n");
     }
     memset(msg, 0, MSG_SIZE);
     memset(buffer, 0, MSG_SIZE + 32);
@@ -165,6 +193,7 @@ int main(int argc, char *argv[])
   send(dS, nom, 32, 0); // Envoie le nom au serveur
 
   printf("*** Bienvenue ***\n");
+  printf("*** Tapez /help pour voir toutes les commandes ***\n");
 
   pthread_t send_msg_thread;
   if (pthread_create(&send_msg_thread, NULL, (void *)msg_send, NULL) != 0)
