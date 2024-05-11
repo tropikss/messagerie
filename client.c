@@ -34,7 +34,6 @@ void readFile()
   if (fp == NULL)
   {
     printf("Error: could not open file %s", filename);
-
   }
 
   // reading line by line, max 256 bytes
@@ -43,9 +42,9 @@ void readFile()
 
   while (fgets(buffer, MAX_LENGTH, fp))
     printf("%s", buffer);
-  
+
   printf("\n");
-  
+
   // close the file
   fclose(fp);
 }
@@ -179,18 +178,29 @@ int main(int argc, char *argv[])
   //   exit(EXIT_FAILURE);
   // }
 
-  printf("Veuillez entrer votre nom: ");
-  fgets(nom, 32, stdin);
-  int i;
-  for (i = 0; i < strlen(nom); i++)
-  { // trim \n
-    if (nom[i] == '\n')
+  while (1)
+  {
+    char msg_recv[32];
+    printf("Veuillez entrer votre nom: ");
+    fgets(nom, 32, stdin);
+    int i;
+    for (i = 0; i < strlen(nom); i++)
+    { // trim \n
+      if (nom[i] == '\n')
+      {
+        nom[i] = '\0';
+        break;
+      }
+    }
+    send(dS, nom, 32, 0);      // Envoie le nom au serveur
+    memset(msg_recv, 0, MSG_SIZE);
+    recv(dS, msg_recv, 32, 0); // Attends la validation du serveur
+    printf("%s\n",msg_recv);
+    if (strcmp(msg_recv, "Nom correcte") == 0)
     {
-      nom[i] = '\0';
       break;
     }
   }
-  send(dS, nom, 32, 0); // Envoie le nom au serveur
 
   printf("*** Bienvenue ***\n");
   printf("*** Tapez /help pour voir toutes les commandes ***\n");

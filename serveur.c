@@ -102,6 +102,46 @@ void send_message(char *s, int uid)
   pthread_mutex_unlock(&clients_mutex);
 }
 
+// Fonction qui envoie un message à l'id mis en param
+void send_message_id(char *s, int uid)
+{
+  pthread_mutex_lock(&clients_mutex);
+  for (int i = 0; i < MAX_CLIENT; ++i)
+  {
+    if (clientsTab[i])
+    {
+      if (clientsTab[i]->id_client == uid) // vérifie si cela est l'id
+      {
+        if (write(clientsTab[i]->sockID, s, strlen(s)) < 0)
+        {
+          perror("ERREUR: Envoie du message échoué");
+          break;
+        }
+      }
+    }
+  }
+  pthread_mutex_unlock(&clients_mutex);
+}
+
+// Vérifie s'il n'y a pas déjà un nom pareil dans le chat
+int check_name(char *s)
+{
+  pthread_mutex_lock(&clients_mutex);
+  for (int i = 0; i < MAX_CLIENT; ++i)
+  {
+    if (clientsTab[i])
+    {
+      if (strcmp(clientsTab[i]->nom, s) == 0) // Même nom trouver
+      {
+        pthread_mutex_unlock(&clients_mutex);
+        return 1;
+      }
+    }
+  }
+  pthread_mutex_unlock(&clients_mutex);
+  return 0;
+}
+
 // Vérifie si le message est un message privé
 int check_message(char *s)
 {
@@ -204,17 +244,23 @@ void *new_client(void *args)
   client *data_client = (client *)args; // Pointeur de type client pour accéder aux données du client
 
   // Vérification du nom du client
-  if (recv(data_client->sockID, nom, 64, 0) <= 0 || strlen(nom) < 2 || strlen(nom) >= 64 - 1)
+  int valid = 1;
+  while (valid)
   {
-    printf("Taille incorrecte.\n");
-    state = 1;
-  }
-  else
-  {
-    strcpy(data_client->nom, nom);
-    sprintf(message, "%s a rejoint le chat\n", data_client->nom);
-    printf("%s", message);
-    send_message(message, data_client->id_client);
+    if (recv(data_client->sockID, nom, 64, 0) <= 0 || strlen(nom) < 2 || strlen(nom) >= 64 - 1 || check_name(nom) == 1)
+    {
+      printf("Nom incorrecte.\n");
+      send_message_id("Nom incorrecte.", data_client->id_client);
+    }
+    else
+    {
+      send_message_id("Nom correcte", data_client->id_client);
+      strcpy(data_client->nom, nom);
+      sprintf(message, "%s a rejoint le chat\n", data_client->nom);
+      printf("%s", message);
+      send_message(message, data_client->id_client);
+      valid = 0;
+    }
   }
 
   memset(message, 0, MSG_SIZE);
