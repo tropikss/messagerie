@@ -8,7 +8,7 @@
 #include <unistd.h>
 
 //------------------------------------------
-#define MSG_SIZE 100   // Taille max du message
+#define MSG_SIZE 100  // Taille max du message
 #define MAX_CLIENT 10 // Nombre max de clients
 //------------------------------------------
 static unsigned int nb_client = 0; // Nombre de clients connectés
@@ -102,6 +102,81 @@ void send_message(char *s, int uid)
   pthread_mutex_unlock(&clients_mutex);
 }
 
+// Vérifie si le message est un message privé
+int check_message(char *s)
+{
+  char *input_msg = strdup(s);
+  char *command = strtok(input_msg, " ");
+  command = strtok(NULL, " ");     // Extracte le deuxième mot du message
+  if (strcmp(command, "/mp") == 0) // Vérifie si c'est /mp
+  {
+    return 1;
+  }
+  else
+  {
+    return 0;
+  }
+}
+
+// Récupère le nom du destinataire et le message à envoyer
+char **get_name_and_message(char *s)
+{
+  char *input_msg = strdup(s);
+  char **result = malloc(2 * sizeof(char *)); // Allocate memory for an array of two strings
+  if (result == NULL)
+  {
+    fprintf(stderr, "Memory allocation failed\n");
+    exit(EXIT_FAILURE);
+  }
+
+  char *token = strtok((char *)input_msg, " ");
+  if (token != NULL)
+  {
+    token = strtok(NULL, " "); // On n'utilise pas le premier mot (nom:)
+    token = strtok(NULL, " "); // Ni le deuxième (/mp)
+    if (token != NULL)
+    {
+      result[0] = strdup(token); // Copier le 3eme mot - destinataire
+      token = strtok(NULL, " ");
+      if (token != NULL)
+      {
+        result[1] = strdup(token); // Copier le 4eme mot - message privé
+      }
+      else
+      {
+        result[1] = strdup("");
+      }
+    }
+    else
+    {
+      result[0] = strdup("");
+      result[1] = strdup("");
+    }
+  }
+  return result;
+}
+
+// Fonction qui envoie un message privé au destinateur
+void send_messagePRV(char *s, char *destinateur)
+{
+  pthread_mutex_lock(&clients_mutex);
+  for (int i = 0; i < MAX_CLIENT; ++i)
+  {
+    if (clientsTab[i])
+    {
+      if (strcmp(clientsTab[i]->nom, destinateur) == 0)
+      {
+        if (write(clientsTab[i]->sockID, s, strlen(s)) < 0)
+        {
+          perror("ERREUR: Envoie du message échoué");
+          break;
+        }
+      }
+    }
+  }
+  pthread_mutex_unlock(&clients_mutex);
+}
+
 // Gère la communication entre les clients (envoie et réception)
 // Executer dans un thread séparé pour chaque client
 void *new_client(void *args)
@@ -135,6 +210,8 @@ void *new_client(void *args)
     send_message(message, data_client->id_client);
   }
 
+  memset(message, 0, MSG_SIZE);
+
   while (1)
   {
     if (state) // le client doit quiiter le chat
@@ -148,19 +225,39 @@ void *new_client(void *args)
     {
       if (strlen(message) > 0)
       {
-        send_message(message, data_client->id_client);
-        int i;
-        for (i = 0; i < strlen(message); i++)
-        { // trim \n
-          if (message[i] == '\n')
-          {
-            message[i] = '\0';
-            break;
+        if (check_message(message) == 1) // c'est un message privé
+        {
+          char **info = get_name_and_message(message);
+          send_messagePRV(info[1], info[0]);
+          int i;
+          for (i = 0; i < strlen(message); i++)
+          { // trim \n
+            if (message[i] == '\n')
+            {
+              message[i] = '\0';
+              break;
+            }
           }
+          printf("%s \n", message);
         }
-        printf("%s -> %s\n", message, data_client->nom);
+        else
+        {
+          // Message normal
+          send_message(message, data_client->id_client);
+          int i;
+          for (i = 0; i < strlen(message); i++)
+          { // trim \n
+            if (message[i] == '\n')
+            {
+              message[i] = '\0';
+              break;
+            }
+          }
+          printf("%s \n", message);
+        }
       }
     }
+
     else if (receive == 0 || strcmp(message, "/exit") == 0)
     {
       sprintf(message, "%s a quitté le chat\n", data_client->nom);
