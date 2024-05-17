@@ -142,7 +142,8 @@ int check_name(char *s)
   return 0;
 }
 
-// Vérifie si le message est un message privé
+// ------------------------ Modification Aloïs -----------------------------
+// Vérifie si le message est un message privé ou une commande /list
 int check_message(char *s)
 {
   char *input_msg = strdup(s);
@@ -152,11 +153,16 @@ int check_message(char *s)
   {
     return 1;
   }
+  else if (strcmp(command, "/list") == 0) // Vérifie si c'est /list
+  {
+    return 2;
+  }
   else
   {
     return 0;
   }
 }
+// ------------------------ Fin modification Aloïs -------------------------
 
 // Récupère le nom du destinataire et le message à envoyer
 char **get_name_and_message(char *s)
@@ -297,6 +303,23 @@ void *new_client(void *args)
           }
           printf("%s \n", message);
         }
+        // ------------------- Modification Aloïs ----------------------
+        else if (check_message(message) == 2) // c'est la commande /list
+        {
+          char list_message[MSG_SIZE] = "Liste des utilisateurs connectés:\n";
+          pthread_mutex_lock(&clients_mutex);
+          for (int i = 0; i < MAX_CLIENT; ++i)
+          {
+            if (clientsTab[i])
+            {
+              strcat(list_message, clientsTab[i]->nom);
+              strcat(list_message, "\n");
+            }
+          }
+          pthread_mutex_unlock(&clients_mutex);
+          send_message_id(list_message, data_client->id_client);
+        }
+        // ------------------- Fin modification Aloïs ------------------
         else
         {
           // Message normal
@@ -345,6 +368,13 @@ int main(int argc, char *argv[])
   printf("Début programme\n");
 
   int dS = socket(PF_INET, SOCK_STREAM, 0);
+  //---------------------- Modification Aloïs ---------------------------
+  if (dS == -1)
+  {
+    perror("Erreur lors de la création de la socket");
+    exit(EXIT_FAILURE); // Arrêter le programme en cas d'échec
+  }
+  //---------------------- Fin modification Aloïs -----------------------
   printf("Socket Créé\n");
 
   /* Socket settings */
@@ -422,7 +452,14 @@ int main(int argc, char *argv[])
         // Ajoute le nouveau client à la file d'attente des client
         ajout_client(newClient);
         // Crée un thread pour gérer la communication avec le client
-        pthread_create(&tid, NULL, &new_client, (void *)newClient);
+        int result = pthread_create(&tid, NULL, &new_client, (void *)newClient);
+        //---------------------- Modification Aloïs ---------------------------
+        if (result != 0)
+        {
+          fprintf(stderr, "Erreur lors de la création du thread: %s\n", strerror(result));
+          exit(EXIT_FAILURE);
+        }
+        //---------------------- Fin modification Aloïs -----------------------
         sleep(1);
 
         //***********************OUTDATE**************************
