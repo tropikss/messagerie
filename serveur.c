@@ -73,6 +73,7 @@ void retire_client(int uid)
     {
       if (clientsTab[i]->id_client == uid)
       {
+        strcpy(clientsTab[i]->nom,"\n");
         clientsTab[i] = NULL;
         break;
       }
@@ -149,11 +150,16 @@ int check_message(char *s)
   char *input_msg = strdup(s);
   char *command = strtok(input_msg, " ");
   command = strtok(NULL, " ");     // Extracte le deuxième mot du message
+
+  char *input_msg1 = strdup(s);
+  char *command1 = strtok(input_msg1, " ");
+  command1 = strtok(NULL, "\n"); 
+
   if (strcmp(command, "/mp") == 0) // Vérifie si c'est /mp
   {
     return 1;
   }
-  else if (strcmp(command, "/list") == 0) // Vérifie si c'est /list
+  else if (strcmp(command1, "/list") == 0) // Vérifie si c'est /list
   {
     return 2;
   }
@@ -284,6 +290,7 @@ void *new_client(void *args)
     {
       if (strlen(message) > 0)
       {
+        printf("%d \n", check_message(message));
         if (check_message(message) == 1) // c'est un message privé
         {
           char **info = get_name_and_message(message);
@@ -336,6 +343,7 @@ void *new_client(void *args)
           printf("%s \n", message);
         }
       }
+      memset(message, 0, MSG_SIZE);
     }
 
     else if (receive == 0 || strcmp(message, "/exit") == 0)
@@ -354,6 +362,7 @@ void *new_client(void *args)
   }
 
   close(data_client->sockID);            // Fermeture du socket du client
+  strcpy(nom,"\n");
   retire_client(data_client->id_client); // Suppression du client de la file d'attente
   free(data_client);                     // Libération de la mémoire
   nb_client--;                           // Décrémentation du nombre total de clients
