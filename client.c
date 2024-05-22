@@ -123,6 +123,30 @@ void msg_send()
   catch_ctrl_c_and_exit(2);
 }
 
+//-----------------MODIFICATION POOMEDY------------------------------
+// Gère la réception de la taille
+int taille_recv()
+{
+  int taille;
+  int response = recv(dS, &taille, sizeof(int), 0);
+  printf("Taille reçu: %d\n", taille);
+  if (response > 0)
+  {
+    taille = ntohl(taille);
+    return taille+1;
+  }
+}
+
+// Gère l'envoi de la taille
+void taille_send(char *sortie)
+{
+  int taille = strlen(sortie);
+  taille = htonl(taille);
+  printf("Taille envoyé: %d\n", htonl(taille));
+  send(dS, &taille, sizeof(int), 0);
+}
+//-------------------------------------------------------------------
+
 int main(int argc, char *argv[])
 {
   dS = socket(AF_INET, SOCK_STREAM, 0);
@@ -180,7 +204,7 @@ int main(int argc, char *argv[])
 
   while (1)
   {
-    char msg_recv[32];
+    //-----------------MODIFICATION POOMEDY------------------------------
     printf("Veuillez entrer votre nom: ");
     fgets(nom, 32, stdin);
     int i;
@@ -192,15 +216,29 @@ int main(int argc, char *argv[])
         break;
       }
     }
-    send(dS, nom, 32, 0);      // Envoie le nom au serveur
-    memset(msg_recv, 0, MSG_SIZE);
-    recv(dS, msg_recv, 32, 0); // Attends la validation du serveur
-    printf("%s\n",msg_recv);
+
+    // 1 - Envoie de la taille du message
+    taille_send(nom);
+
+    // 2 - Envoie le nom au serveur
+    int taille = strlen(nom);
+    send(dS, nom, taille*sizeof(char), 0);
+
+    // 3 - Réception la taille du message
+    taille = taille_recv();
+
+    // 4 - Réception du message du serveur
+    char msg_recv = (char *)malloc(taille * sizeof(char));
+    recv(dS, msg_recv, taille*sizeof(char), 0); // Attends la validation du serveur
+    printf("%s\n", msg_recv);
     if (strcmp(msg_recv, "Nom correcte") == 0)
     {
       break;
     }
+
+    memset(msg_recv, 0, MSG_SIZE);
   }
+  //-------------------------------------------------------------------
 
   printf("*** Bienvenue ***\n");
   printf("*** Tapez /help pour voir toutes les commandes ***\n");

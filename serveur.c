@@ -218,11 +218,37 @@ void send_message_priv(char *s, char *destinateur, int uid)
   }
   pthread_mutex_unlock(&clients_mutex);
 
+//-----------------MODIFICATION POOMEDY------------------------------
   if (receiver_exist == 0)
   {
-    printf("Receiver does not exist\n");
+    printf("Destinataire n'existe pas\n");
+    send_message_id("Destinataire n'existe pas\n", uid);
   }
 }
+//-------------------------------------------------------------------
+
+
+//-----------------MODIFICATION POOMEDY------------------------------
+// Gère la réception de la taille
+int taille_recv(int uid)
+{
+  int taille;
+  int response = recv(uid, &taille, sizeof(int), 0);
+  printf("Taille reçu: %d\n", taille);
+  if (response > 0)
+  {
+    return taille+1;
+  }
+}
+
+// Gère l'envoi de la taille
+void taille_send(int uid, char *sortie)
+{
+  int taille = strlen(sortie);
+  printf("Taille envoyé: %d\n", taille);
+  send(uid, &taille+1, sizeof(int), 0);
+}
+//-------------------------------------------------------------------
 
 // Gère la communication entre les clients (envoie et réception)
 // Executer dans un thread séparé pour chaque client
@@ -238,7 +264,6 @@ void *new_client(void *args)
   // char *nom = data_client->nom;
 
   char message[MSG_SIZE];               // Message sortant
-  char nom[64];                         // Nom du client
   int state = 0;                        // Indique si le client quitte la convo
   nb_client++;                          // Incrémente le nombre de clients
   client *data_client = (client *)args; // Pointeur de type client pour accéder aux données du client
@@ -247,6 +272,9 @@ void *new_client(void *args)
   int valid = 1;
   while (valid)
   {
+    //Réception la taille avant
+    int taille = taille_recv(data_client->sockID);
+    char nom = (char *)malloc(taille * sizeof(char));
     if (recv(data_client->sockID, nom, 64, 0) <= 0 || strlen(nom) < 2 || strlen(nom) >= 64 - 1 || check_name(nom) == 1)
     {
       printf("Nom incorrecte.\n");
