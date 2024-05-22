@@ -73,7 +73,7 @@ void retire_client(int uid)
     {
       if (clientsTab[i]->id_client == uid)
       {
-        strcpy(clientsTab[i]->nom,"\n");
+        strcpy(clientsTab[i]->nom, "\n");
         clientsTab[i] = NULL;
         break;
       }
@@ -149,11 +149,11 @@ int check_message(char *s)
 {
   char *input_msg = strdup(s);
   char *command = strtok(input_msg, " ");
-  command = strtok(NULL, " ");     // Extracte le deuxième mot du message
+  command = strtok(NULL, " "); // Extracte le deuxième mot du message
 
   char *input_msg1 = strdup(s);
   char *command1 = strtok(input_msg1, " ");
-  command1 = strtok(NULL, "\n"); 
+  command1 = strtok(NULL, "\n");
 
   if (strcmp(command, "/mp") == 0) // Vérifie si c'est /mp
   {
@@ -162,6 +162,10 @@ int check_message(char *s)
   else if (strcmp(command1, "/list") == 0) // Vérifie si c'est /list
   {
     return 2;
+  }
+  else if (strcmp(command1, "/close") == 0) // Vérifie si c'est /close
+  {
+    return 3;
   }
   else
   {
@@ -210,6 +214,37 @@ char **get_name_and_message(char *s)
 
 // Fonction qui envoie un message privé au destinateur
 void send_message_priv(char *s, char *destinateur, int uid)
+
+    // ------------------- Modification Aloïs ------------------
+    // Fonction qui va fermer toutes les socket client et ds la socket serveur
+    void close_server()
+{
+  pthread_mutex_lock(&clients_mutex);
+  // Ferme toutes les socket client
+  for (int i = 0; i < MAX_CLIENT; ++i)
+  {
+    if (clientsTab[i])
+    {
+      if (close(clientsTab[i]->socket) == -1)
+      {
+        perror("Failed to close client socket");
+      }
+      free(clientsTab[i]);
+      clientsTab[i] = NULL;
+    }
+  }
+  pthread_mutex_unlock(&clients_mutex);
+
+  // Ferme dS (socket serveur)
+  if (dS != -1)
+  {
+    if (close(dS) == -1)
+    {
+      perror("Failed to close server socket");
+    }
+  }
+}
+// ----------------- Fin modification Aloïs ----------------
 {
   int receiver_exist = 0;
   pthread_mutex_lock(&clients_mutex);
@@ -326,6 +361,28 @@ void *new_client(void *args)
           pthread_mutex_unlock(&clients_mutex);
           send_message_id(list_message, data_client->id_client);
         }
+        else if (check_message(message) == 3) // c'est la commande /close
+        {
+          char *closingMessage = "Le serveur va fermer dans 5 secondes...";
+          printf("%s", closingMessage);
+          pthread_mutex_lock(&clients_mutex);
+          // Envoyer le message à tous les utilisateurs connectés
+          for (int i = 0; i < MAX_CLIENT; ++i)
+          {
+            if (clientsTab[i])
+            {
+              send_message_id(closingMessage, clientsTab[i]->id_client);
+            }
+          }
+          pthread_mutex_unlock(&clients_mutex);
+
+          // Wait for 5 seconds
+          sleep(5);
+
+          // Close the server
+          // Assuming you have a function close_server that closes the server
+          close_server();
+        }
         // ------------------- Fin modification Aloïs ------------------
         else
         {
@@ -361,8 +418,8 @@ void *new_client(void *args)
     memset(message, 0, MSG_SIZE);
   }
 
-  close(data_client->sockID);            // Fermeture du socket du client
-  strcpy(nom,"\n");
+  close(data_client->sockID); // Fermeture du socket du client
+  strcpy(nom, "\n");
   retire_client(data_client->id_client); // Suppression du client de la file d'attente
   free(data_client);                     // Libération de la mémoire
   nb_client--;                           // Décrémentation du nombre total de clients
