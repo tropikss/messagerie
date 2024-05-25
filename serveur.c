@@ -17,14 +17,6 @@ static int uid = 10;               // Taille des identifiants(unique) de chaque 
 // Vous pouvez lancer le programme avec "./serveur.sh", c'est un programme qui attribue automatiquement
 // un nouveau port au serveur et au client, bien sur le meme entre eux
 
-//***********************OUTDATE**************************
-// void sigHandler(int signo) {
-//     if (signo == SIGUSR1) {
-//         printf("Au moins un des threads s'est terminé\n");
-//         exit(EXIT_SUCCESS);
-//     }
-// }
-
 // Structure du client - Information sur eux
 typedef struct
 {
@@ -37,16 +29,6 @@ typedef struct
 client *clientsTab[MAX_CLIENT]; // Tableau de tous les clients connectés
 
 pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER; // Initialisation d'un mutex pour synchroniser l'accès concurrentiel aux données des clients
-
-//***********************OUTDATE**************************
-// typedef struct {
-//   int type;
-//   int taille; //ajout de la taille du message pas généré par chatGPT :P MathisssEEEuuu (sais qu'il va même pas regardez mon code)
-//   union {
-//     int i;
-//     char msg[MSG_SIZE];
-//   } info;
-// } data;
 
 // Fonction qui ajoute un nouveau client
 void ajout_client(client *nouveau_client)
@@ -147,10 +129,19 @@ int check_message(char *s)
 {
   char *input_msg = strdup(s);
   char *command = strtok(input_msg, " ");
-  command = strtok(NULL, " ");     // Extracte le deuxième mot du message
+  command = strtok(NULL, " "); // Extracte le deuxième mot du message
+
+  char *input_msg_file = strdup(s);
+  char *command_file = strtok(input_msg_file, " ");
+  command_file = strtok(NULL, "\n"); // Extracte le deuxième mot du message
+
   if (strcmp(command, "/mp") == 0) // Vérifie si c'est /mp
   {
     return 1;
+  }
+  else if (strcmp(command_file, "/file") == 0) // Vérifie si c'est /file
+  {
+    return 3;
   }
   else
   {
@@ -218,7 +209,7 @@ void send_message_priv(char *s, char *destinateur, int uid)
   }
   pthread_mutex_unlock(&clients_mutex);
 
-//-----------------MODIFICATION POOMEDY------------------------------
+  //-----------------MODIFICATION POOMEDY------------------------------
   if (receiver_exist == 0)
   {
     printf("Destinataire n'existe pas\n");
@@ -227,8 +218,53 @@ void send_message_priv(char *s, char *destinateur, int uid)
 }
 //-------------------------------------------------------------------
 
-
 //-----------------MODIFICATION POOMEDY------------------------------
+// Gére la réception de fichier du client
+void receive_file(int client_sock)
+{
+  char filename[256];
+  char file_size_str[16];
+  int file_size;
+  FILE *file;
+  char buffer[1024];
+
+  // Reçoit le nom du fichier
+  recv(client_sock, filename, sizeof(filename), 0);
+  filename[strcspn(filename, "\n")] = 0;
+
+  // Reçoit la taille du fichier
+  recv(client_sock, file_size_str, sizeof(file_size_str), 0);
+  file_size = atoi(file_size_str);
+
+  // Ouverture du fichier pour l'écriture
+  char filepath[512];
+  snprintf(filepath, sizeof(filepath), "./server_folder/%s", filename);
+  file = fopen(filepath, "wb");
+  if (!file)
+  {
+    perror("Fichier ne peut être ouvert");
+    return;
+  }
+
+  // Reçoit le contenu du fichier
+  int total_received = 0;
+  while (total_received < file_size)
+  {
+    int bytes_received = recv(client_sock, buffer, sizeof(buffer), 0);
+    if (bytes_received <= 0)
+    {
+      break;
+    }
+    fwrite(buffer, 1, bytes_received, file);
+    total_received += bytes_received;
+    printf("Reçu: %d/%d octets\n", total_received, file_size);
+  }
+
+  // Close the file
+  fclose(file);
+  printf("Fichier %s reçu avec succès.\n", filename);
+}
+
 // Gère la réception de la taille
 int taille_recv(int uid)
 {
@@ -237,7 +273,7 @@ int taille_recv(int uid)
   printf("Taille reçu: %d\n", taille);
   if (response > 0)
   {
-    return taille+1;
+    return taille + 1;
   }
 }
 
@@ -246,7 +282,7 @@ void taille_send(int uid, char *sortie)
 {
   int taille = strlen(sortie);
   printf("Taille envoyé: %d\n", taille);
-  send(uid, &taille+1, sizeof(int), 0);
+  send(uid, &taille + 1, sizeof(int), 0);
 }
 //-------------------------------------------------------------------
 
@@ -254,16 +290,8 @@ void taille_send(int uid, char *sortie)
 // Executer dans un thread séparé pour chaque client
 void *new_client(void *args)
 {
-  //***********************OUTDATE**************************
-  // data send_data;
-  // client *data_client = (client *)args;
-  // int id_client = data_client->id_client;
-  // int *tab_client = data_client->tab_client_client;
-  // int *tab_size = data_client->tab_size;
-  // pthread_mutex_t *mutex_client = data_client->mutex_client;
-  // char *nom = data_client->nom;
-
   char message[MSG_SIZE];               // Message sortant
+  char nom[64];                         // Nom du client
   int state = 0;                        // Indique si le client quitte la convo
   nb_client++;                          // Incrémente le nombre de clients
   client *data_client = (client *)args; // Pointeur de type client pour accéder aux données du client
@@ -272,9 +300,6 @@ void *new_client(void *args)
   int valid = 1;
   while (valid)
   {
-    //Réception la taille avant
-    int taille = taille_recv(data_client->sockID);
-    char nom = (char *)malloc(taille * sizeof(char));
     if (recv(data_client->sockID, nom, 64, 0) <= 0 || strlen(nom) < 2 || strlen(nom) >= 64 - 1 || check_name(nom) == 1)
     {
       printf("Nom incorrecte.\n");
@@ -302,11 +327,13 @@ void *new_client(void *args)
 
     // Réception d'un message du client
     int receive = recv(data_client->sockID, message, MSG_SIZE, 0);
-    if (receive > 0)
+
+    if (receive > 0) // Messages normales ou privés ou fichier
     {
       if (strlen(message) > 0)
       {
-        if (check_message(message) == 1) // c'est un message privé
+        int result = check_message(message);
+        if (result == 1) // c'est un message privé
         {
           char **info = get_name_and_message(message);
           char concatenated[MSG_SIZE];
@@ -324,6 +351,10 @@ void *new_client(void *args)
             }
           }
           printf("%s \n", message);
+        }
+        else if (result == 3) // c'est un fichier
+        {
+          receive_file(data_client->sockID);
         }
         else
         {
@@ -343,7 +374,7 @@ void *new_client(void *args)
       }
     }
 
-    else if (receive == 0 || strcmp(message, "/exit") == 0)
+    else if (receive == 0 || strcmp(message, "/exit") == 0) // Demande d'arrêt
     {
       sprintf(message, "%s a quitté le chat\n", data_client->nom);
       printf("%s", message);
@@ -403,30 +434,6 @@ int main(int argc, char *argv[])
   listen(dS, 7);
   printf("Mode écoute\n");
 
-  //***********************OUTDATE**************************
-  // int *nb_client = (int *)malloc(sizeof(int));
-  // *nb_client = 0;
-
-  // int *tab_client = (int *)malloc(MAX_CLIENT * sizeof(int)); // création du tableau d'id client
-  // pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-
-  // pthread_t *tab_thread = (pthread_t *)malloc(MAX_CLIENT * sizeof(pthread_t));
-
-  // struct sockaddr_in sock_client;
-  // socklen_t lg = sizeof(struct sockaddr_in);
-
-  // client *shared_client = (client *)malloc(sizeof(client));
-  // shared_client->mutex_client = &mutex;
-  // shared_client->tab_client_client = tab_client;
-
-  // struct sigaction sa;
-  // sa.sa_handler = sigHandler;
-  // sigemptyset(&sa.sa_mask);
-  // sa.sa_flags = 0;
-  // sigaction(SIGUSR1, &sa, NULL);
-
-  // printf("Initialisation réussie\n");
-
   struct sockaddr_in sock_client;
   pthread_t tid;
 
@@ -452,28 +459,6 @@ int main(int argc, char *argv[])
         // Crée un thread pour gérer la communication avec le client
         pthread_create(&tid, NULL, &new_client, (void *)newClient);
         sleep(1);
-
-        //***********************OUTDATE**************************
-        // pthread_mutex_lock(&mutex);
-        // tab_client[*nb_client] = request;
-        // printf("Client %d connecté ", *nb_client + 1);
-        // shared_client->id_client = request;
-        // shared_client->tab_size = nb_client;
-        // *nb_client += 1;
-        // char *nom = (char *)malloc(MAX_NOM * sizeof(char));
-        // sprintf(nom, "client n%d", *nb_client);
-        // shared_client->nom = nom;
-
-        // pthread_mutex_unlock(&mutex);
-
-        // if (pthread_create(&tab_thread[*nb_client], NULL, new_client, shared_client) != 0)
-        // {
-        //   printf("avec erreur\n");
-        // }
-        // else
-        // {
-        //   printf("avec succès\n");
-        // }
       }
       else
       {
