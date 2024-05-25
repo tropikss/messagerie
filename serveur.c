@@ -260,7 +260,6 @@ void receive_file(int client_sock)
     printf("Reçu: %d/%d octets\n", total_received, file_size);
   }
 
-  // Close the file
   fclose(file);
   printf("Fichier %s reçu avec succès.\n", filename);
 }
