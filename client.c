@@ -13,10 +13,13 @@
 //------------------------------------------
 #define MSG_SIZE 100               // Taille max du message
 #define FILE_DIR "./client_folder" // Dossier clients pour stocker les fichiers
+
+#define PORT_FILE "1234"
 //------------------------------------------
-int flag = 0; // Gestion du signal
-int dS = 0;   // Descripteur de fichier du socket
-char nom[32]; // Nom du client
+int flag = 0;       // Gestion du signal
+int dS = 0;         // Descripteur de fichier du socket
+int dS_fichier = 0; // Descripteur de fichier du socket destiné aux fichiers
+char nom[32];       // Nom du client
 
 // pareil que pour "serveur.sh", faites "./client.sh", ca recupere automatiquement votre IP (pour les tests)
 // et ca attribue tout seul un nouveau port
@@ -112,20 +115,20 @@ void send_file()
   fseek(file, 0, SEEK_SET);
 
   // Envoie le nom du fichier au serveur
-  send(dS, filename, strlen(filename), 0);
-  send(dS, "\n", 1, 0);
+  send(dS_fichier, filename, strlen(filename), 0);
+  send(dS_fichier, "\n", 1, 0);
 
   // Envoie la taille du fichier
   snprintf(file_size_str, sizeof(file_size_str), "%d", file_size);
-  send(dS, file_size_str, strlen(file_size_str), 0);
-  send(dS, "\n", 1, 0);
+  send(dS_fichier, file_size_str, strlen(file_size_str), 0);
+  send(dS_fichier, "\n", 1, 0);
 
   // Envoie le contenu du fichier
   char buffer[1024];
   int bytes_read;
   while ((bytes_read = fread(buffer, 1, sizeof(buffer), file)) > 0)
   {
-    if (send(dS, buffer, bytes_read, 0) == -1)
+    if (send(dS_fichier, buffer, bytes_read, 0) == -1)
     {
       perror("Erreur pendant l'envoie du fichier");
       fclose(file);
@@ -233,6 +236,7 @@ void taille_send(char *sortie)
 
 int main(int argc, char *argv[])
 {
+  /* ------------------------SOCKET MESSAGES------------------------------------*/
   dS = socket(AF_INET, SOCK_STREAM, 0);
   printf("Début programme\n");
   if (dS == -1)
@@ -257,7 +261,35 @@ int main(int argc, char *argv[])
     exit(1);
   }
   printf("Socket Connecté\n"); // reussite
+  /* ------------------------SOCKET MESSAGES------------------------------------*/
 
+  /* ------------------------SOCKET FICHIERS------------------------------------*/
+  dS_fichier = socket(AF_INET, SOCK_STREAM, 0);
+  if (dS_fichier == -1)
+  {
+    perror("Erreur lors de la création de la socket fichier");
+    exit(EXIT_FAILURE);
+  }
+  printf("Socket fichier Créé\n");
+
+  struct sockaddr_in aS_fichier;
+  aS_fichier.sin_family = AF_INET;
+  inet_pton(AF_INET, argv[1], &(aS_fichier.sin_addr));
+  aS_fichier.sin_port = htons(atoi(PORT_FILE));
+  socklen_t lgA_fichier = sizeof(struct sockaddr_in);
+
+  /* Signal */
+  signal(SIGINT, catch_ctrl_c_and_exit);
+
+  if (connect(dS_fichier, (struct sockaddr *)&aS_fichier, lgA_fichier) == -1) // tentative connexion au serveur
+  {
+    printf("Pas de serveur trouvé\n"); // echec
+    exit(1);
+  }
+  printf("Socket Fichier Connecté\n"); // reussite
+  /* ------------------------SOCKET FICHIERS------------------------------------*/
+
+  // Validation du pseudo client
   while (1)
   {
     char msg_recv[32];

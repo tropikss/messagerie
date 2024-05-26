@@ -10,6 +10,8 @@
 //------------------------------------------
 #define MSG_SIZE 100  // Taille max du message
 #define MAX_CLIENT 10 // Nombre max de clients
+
+#define PORT_FILE "1234"
 //------------------------------------------
 static unsigned int nb_client = 0; // Nombre de clients connectés
 static int uid = 10;               // Taille des identifiants(unique) de chaque client
@@ -20,10 +22,12 @@ static int uid = 10;               // Taille des identifiants(unique) de chaque 
 // Structure du client - Information sur eux
 typedef struct
 {
-  struct sockaddr_in address; // Adresse du client(adresse IP et le port du client)
-  int sockID;                 // Identifiant de la socket du client
-  int id_client;              // Identifiant unique du client
-  char nom[64];               // Nom du client
+  struct sockaddr_in address;         // Adresse du client(adresse IP et le port du client)
+  int sockID;                         // Identifiant de la socket du client
+  struct sockaddr_in address_fichier; // Adresse du client(adresse IP et le port du client) dédié aux fichiers
+  int sockID_fichier;                 // Identifiant de la socket du client dédié aux fichiers
+  int id_client;                      // Identifiant unique du client
+  char nom[64];                       // Nom du client
 } client;
 
 client *clientsTab[MAX_CLIENT]; // Tableau de tous les clients connectés
@@ -255,6 +259,7 @@ void receive_file(int client_sock)
     {
       break;
     }
+    printf("%s",buffer);
     fwrite(buffer, 1, bytes_received, file);
     total_received += bytes_received;
     printf("Reçu: %d/%d octets\n", total_received, file_size);
@@ -353,7 +358,7 @@ void *new_client(void *args)
         }
         else if (result == 3) // c'est un fichier
         {
-          receive_file(data_client->sockID);
+          receive_file(data_client->sockID_fichier);
         }
         else
         {
@@ -389,6 +394,7 @@ void *new_client(void *args)
   }
 
   close(data_client->sockID);            // Fermeture du socket du client
+  close(data_client->sockID_fichier);    // Fermeture du socket du client dédié aux fichiers
   retire_client(data_client->id_client); // Suppression du client de la file d'attente
   free(data_client);                     // Libération de la mémoire
   nb_client--;                           // Décrémentation du nombre total de clients
@@ -399,7 +405,7 @@ void *new_client(void *args)
 
 int main(int argc, char *argv[])
 {
-
+  /* ------------------------SOCKET MESSAGES------------------------------------*/
   printf("Début programme\n");
 
   int dS = socket(PF_INET, SOCK_STREAM, 0);
@@ -435,6 +441,39 @@ int main(int argc, char *argv[])
 
   struct sockaddr_in sock_client;
   pthread_t tid;
+  /* ------------------------SOCKET MESSAGES------------------------------------*/
+
+  /* ------------------------SOCKET FICHIERS------------------------------------*/
+  int dS_fichier = socket(PF_INET, SOCK_STREAM, 0);
+
+  /* Socket settings */
+  struct sockaddr_in ad_fichier;
+  ad_fichier.sin_family = AF_INET;
+  ad_fichier.sin_addr.s_addr = INADDR_ANY;
+  ad_fichier.sin_port = htons(atoi(PORT_FILE)); // PORT SERVEUR
+
+  /* Ignore pipe signals */
+  signal(SIGPIPE, SIG_IGN);
+  int option_fichier = 1;
+  if (setsockopt(dS_fichier, SOL_SOCKET, (SO_REUSEPORT | SO_REUSEADDR), (char *)&option_fichier, sizeof(option_fichier)) < 0)
+  {
+    perror("ERROR: setsockopt failed");
+    return EXIT_FAILURE;
+  }
+
+  /* Bind */
+  int res_fichier = bind(dS_fichier, (struct sockaddr *)&ad_fichier, sizeof(ad_fichier));
+  if (res_fichier == -1)
+  {
+    perror("Erreur bind");
+    exit(1);
+  }
+
+  /* Listen */
+  listen(dS_fichier, 7);
+
+  struct sockaddr_in sock_client_fichier;
+  /* ------------------------SOCKET FICHIERS------------------------------------*/
 
   while (1)
   {
@@ -447,16 +486,33 @@ int main(int argc, char *argv[])
       { // on vérifie que la connexion s'est bien faite
         printf("Connexion possible\n");
 
-        // Alloue de la mémoire pour un nouveau client, puis initialise ses données
+        // Alloue de la mémoire pour un nouveau client
         client *newClient = (client *)malloc(sizeof(client));
+        // Initialise ses données
         newClient->address = sock_client;
         newClient->sockID = request;
         newClient->id_client = uid++;
 
+        socklen_t lg_fichier = sizeof(sock_client_fichier);
+        int request_fichier = accept(dS_fichier, (struct sockaddr *)&sock_client_fichier, &lg_fichier);
+
+        if (request_fichier > 0)
+        { // on vérifie que la connexion s'est bien faite
+          newClient->address_fichier = sock_client_fichier;
+          newClient->sockID_fichier = request_fichier;
+
+          sleep(1);
+        }
+        else
+        {
+          printf("Erreur connexion pour l'envoie des fichiers\n");
+        }
+
         // Ajoute le nouveau client à la file d'attente des client
         ajout_client(newClient);
-        // Crée un thread pour gérer la communication avec le client
+        // Crée un thread pour gérer la communication des messages normales avec le client
         pthread_create(&tid, NULL, &new_client, (void *)newClient);
+
         sleep(1);
       }
       else
@@ -471,6 +527,7 @@ int main(int argc, char *argv[])
     }
   }
 
+  shutdown(dS_fichier, 2);
   shutdown(dS, 2);
   printf("Fin du programme\n");
 }
