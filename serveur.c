@@ -21,9 +21,12 @@ static int uid = 10;               // Taille des identifiants(unique) de chaque 
 typedef struct
 {
   struct sockaddr_in address; // Adresse du client(adresse IP et le port du client)
+  struct sockaddr_in address_file;
   int sockID;                 // Identifiant de la socket du client
   int id_client;              // Identifiant unique du client
   char nom[64];               // Nom du client
+  int sockID_file;
+  int id_client_file;
 } client;
 
 client *clientsTab[MAX_CLIENT]; // Tableau de tous les clients connectés
@@ -220,35 +223,43 @@ void send_message_priv(char *s, char *destinateur, int uid)
 
 //-----------------MODIFICATION POOMEDY------------------------------
 // Gére la réception de fichier du client
-void receive_file(int client_sock)
-{
-  char filename[256];
-  char file_size_str[16];
-  int file_size;
+void receive_file(int client_sock, char* filename) {
+  printf("filename : %s\n", filename);
+
+  int* file_size = (int*)malloc(sizeof(int));
   FILE *file;
-  char buffer[1024];
+  char* buffer = (char*)malloc(sizeof(char)*1024);
 
   // Reçoit le nom du fichier
-  recv(client_sock, filename, sizeof(filename), 0);
   filename[strcspn(filename, "\n")] = 0;
 
   // Reçoit la taille du fichier
-  recv(client_sock, file_size_str, sizeof(file_size_str), 0);
-  file_size = atoi(file_size_str);
+  recv(client_sock, file_size, sizeof(file_size), 0);
+  printf("File size : %i\n", *file_size);
+  *file_size = *file_size - 4;
+
+      // Vérifier si le fichier existe
+    if (access(filename, F_OK) != -1) {
+        printf("Le fichier existe deja.\n");
+        return;
+    } else {
+        // Le fichier n'existe pas
+        printf("Le fichier n'existe pas.\n");
+    }
 
   // Ouverture du fichier pour l'écriture
   char filepath[512];
   snprintf(filepath, sizeof(filepath), "./server_folder/%s", filename);
   file = fopen(filepath, "wb");
-  if (!file)
-  {
+  
+  if (!file) {
     perror("Fichier ne peut être ouvert");
     return;
   }
 
   // Reçoit le contenu du fichier
   int total_received = 0;
-  while (total_received < file_size)
+  while (total_received < *file_size)
   {
     int bytes_received = recv(client_sock, buffer, sizeof(buffer), 0);
     if (bytes_received <= 0)
@@ -257,7 +268,7 @@ void receive_file(int client_sock)
     }
     fwrite(buffer, 1, bytes_received, file);
     total_received += bytes_received;
-    printf("Reçu: %d/%d octets\n", total_received, file_size);
+    printf("Reçu: %d/%i octets\n", total_received, *file_size);
   }
 
   fclose(file);
@@ -289,6 +300,7 @@ void taille_send(int uid, char *sortie)
 // Executer dans un thread séparé pour chaque client
 void *new_client(void *args)
 {
+  char* file = (char*)malloc(sizeof(char)*256);               // fichier entrant
   char message[MSG_SIZE];               // Message sortant
   char nom[64];                         // Nom du client
   int state = 0;                        // Indique si le client quitte la convo
@@ -299,13 +311,11 @@ void *new_client(void *args)
   int valid = 1;
   while (valid)
   {
-    if (recv(data_client->sockID, nom, 64, 0) <= 0 || strlen(nom) < 2 || strlen(nom) >= 64 - 1 || check_name(nom) == 1)
-    {
+    if (recv(data_client->sockID, nom, 64, 0) <= 0 || strlen(nom) < 2 || strlen(nom) >= 64 - 1 || check_name(nom) == 1) {
       printf("Nom incorrecte.\n");
       send_message_id("Nom incorrecte.", data_client->id_client);
     }
-    else
-    {
+    else {
       send_message_id("Nom correcte", data_client->id_client);
       strcpy(data_client->nom, nom);
       sprintf(message, "%s a rejoint le chat\n", data_client->nom);
@@ -316,6 +326,7 @@ void *new_client(void *args)
   }
 
   memset(message, 0, MSG_SIZE);
+  memset(file, 0, MSG_SIZE);
 
   while (1)
   {
@@ -326,9 +337,9 @@ void *new_client(void *args)
 
     // Réception d'un message du client
     int receive = recv(data_client->sockID, message, MSG_SIZE, 0);
+    int receive_file_int = recv(data_client->sockID_file, file, sizeof(file), 0);
 
-    if (receive > 0) // Messages normales ou privés ou fichier
-    {
+    if (receive > 0) { // Messages normaux ou privés
       if (strlen(message) > 0)
       {
         int result = check_message(message);
@@ -350,13 +361,7 @@ void *new_client(void *args)
             }
           }
           printf("%s \n", message);
-        }
-        else if (result == 3) // c'est un fichier
-        {
-          receive_file(data_client->sockID);
-        }
-        else
-        {
+        } else {
           // Message normal
           send_message(message, data_client->id_client);
           int i;
@@ -371,10 +376,7 @@ void *new_client(void *args)
           printf("%s \n", message);
         }
       }
-    }
-
-    else if (receive == 0 || strcmp(message, "/exit") == 0) // Demande d'arrêt
-    {
+    } else if (receive == 0 || strcmp(message, "/exit") == 0) {
       sprintf(message, "%s a quitté le chat\n", data_client->nom);
       printf("%s", message);
       send_message(message, data_client->id_client);
@@ -385,6 +387,11 @@ void *new_client(void *args)
       printf("ERREUR: -1\n");
       state = 1;
     }
+
+    if (receive_file_int > 0) {
+      receive_file(data_client->sockID_file, file);
+    }
+
     memset(message, 0, MSG_SIZE);
   }
 
@@ -397,80 +404,119 @@ void *new_client(void *args)
   return NULL;
 }
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
+    int port = atoi(argv[1]);
+    int file_port = atoi(argv[2]);
 
-  printf("Début programme\n");
+    printf("Port : %i\n", port);
+    printf("File port : %i\n", file_port);
 
-  int dS = socket(PF_INET, SOCK_STREAM, 0);
-  printf("Socket Créé\n");
+    printf("Début programme\n");
 
-  /* Socket settings */
-  struct sockaddr_in ad;
-  ad.sin_family = AF_INET;
-  ad.sin_addr.s_addr = INADDR_ANY;
-  ad.sin_port = htons(atoi(argv[1])); // PORT SERVEUR
+    // Initialisation socket port classique
+    int dS = socket(PF_INET, SOCK_STREAM, 0);
+    printf("Socket créé\n");
 
-  /* Ignore pipe signals */
-  signal(SIGPIPE, SIG_IGN);
-  int option = 1;
-  if (setsockopt(dS, SOL_SOCKET, (SO_REUSEPORT | SO_REUSEADDR), (char *)&option, sizeof(option)) < 0)
-  {
-    perror("ERROR: setsockopt failed");
-    return EXIT_FAILURE;
-  }
+    /* Socket settings */
+    struct sockaddr_in ad;
+    ad.sin_family = AF_INET;
+    ad.sin_addr.s_addr = INADDR_ANY;
+    ad.sin_port = htons(port);
 
-  /* Bind */
-  int res = bind(dS, (struct sockaddr *)&ad, sizeof(ad));
-  if (res == -1)
-  {
-    perror("Erreur bind");
-    exit(1);
-  }
-  printf("Socket Nommé\n");
+    // Initialisation socket pour les fichiers
+    int dS_file = socket(PF_INET, SOCK_STREAM, 0);
+    printf("Socket fichier créé\n");
 
-  /* Listen */
-  listen(dS, 7);
-  printf("Mode écoute\n");
+    /* Socket settings */
+    struct sockaddr_in ad_file;
+    ad_file.sin_family = AF_INET;
+    ad_file.sin_addr.s_addr = INADDR_ANY;
+    ad_file.sin_port = htons(file_port);
 
-  struct sockaddr_in sock_client;
-  pthread_t tid;
+    /* Ignore pipe signals */
+    signal(SIGPIPE, SIG_IGN);
+    int option = 1;
+    if (setsockopt(dS, SOL_SOCKET, (SO_REUSEPORT | SO_REUSEADDR), (char *)&option, sizeof(option)) < 0) {
+        perror("ERROR: setsockopt failed");
+        return EXIT_FAILURE;
+    }
+    if (setsockopt(dS_file, SOL_SOCKET, (SO_REUSEPORT | SO_REUSEADDR), (char *)&option, sizeof(option)) < 0) {
+        perror("ERROR: setsockopt failed");
+        return EXIT_FAILURE;
+    }
 
-  while (1)
-  {
-    socklen_t lg = sizeof(sock_client);
-    int request = accept(dS, (struct sockaddr *)&sock_client, &lg); // on attend une connexion
-    printf("Demande connexion\n");
-    if (nb_client < MAX_CLIENT) // vérifie si on atteint pas le nb max
-    {
-      if (request > 0)
-      { // on vérifie que la connexion s'est bien faite
-        printf("Connexion possible\n");
+    /* Bind socket */
+    int res = bind(dS, (struct sockaddr *)&ad, sizeof(ad));
+    if (res == -1) {
+        perror("Erreur bind");
+        exit(1);
+    }
+    printf("Socket nommé\n");
 
-        // Alloue de la mémoire pour un nouveau client, puis initialise ses données
+    /* Bind socket fichiers */
+    int res_file = bind(dS_file, (struct sockaddr *)&ad_file, sizeof(ad_file));
+    if (res_file == -1) {
+        perror("Erreur bind fichier");
+        exit(1);
+    }
+    printf("Socket fichier nommé\n");
+
+    /* Listen */
+    listen(dS, 7);
+    printf("Mode écoute\n");
+
+    listen(dS_file, 7);
+    printf("Mode écoute fichier\n");
+
+    struct sockaddr_in sock_client;
+    struct sockaddr_in sock_client_file;
+    pthread_t tid;
+
+    while (1) {
+        socklen_t lg = sizeof(sock_client);
+        socklen_t lg_file = sizeof(sock_client_file);
         client *newClient = (client *)malloc(sizeof(client));
-        newClient->address = sock_client;
-        newClient->sockID = request;
-        newClient->id_client = uid++;
 
-        // Ajoute le nouveau client à la file d'attente des client
-        ajout_client(newClient);
-        // Crée un thread pour gérer la communication avec le client
-        pthread_create(&tid, NULL, &new_client, (void *)newClient);
-        sleep(1);
-      }
-      else
-      {
-        printf("Erreur connexion\n");
-      }
-    }
-    else
-    {
-      printf("Nombre maximal de client deja atteint, request refusé\n");
-      shutdown(request, 2);
-    }
-  }
+        int request = accept(dS, (struct sockaddr *)&sock_client, &lg); // on attend une connexion
+        printf("Demande connexion\n");
+        if (nb_client < MAX_CLIENT) { // vérifie si on atteint pas le nb max
+            if (request > 0) { // on vérifie que la connexion s'est bien faite
+                printf("Connexion possible\n");
 
-  shutdown(dS, 2);
-  printf("Fin du programme\n");
+                // Alloue de la mémoire pour un nouveau client, puis initialise ses données
+                newClient->address = sock_client;
+                newClient->sockID = request;
+                newClient->id_client = uid++;
+            } else {
+                printf("Erreur connexion\n");
+                continue;
+            }
+
+            int request_file = accept(dS_file, (struct sockaddr *)&sock_client_file, &lg_file);
+            if (request_file > 0) {
+                newClient->address_file = sock_client_file;
+                newClient->sockID_file = request_file;
+
+                // Ajoute le nouveau client à la file d'attente des clients
+                ajout_client(newClient);
+                // Crée un thread pour gérer la communication avec le client
+                pthread_create(&tid, NULL, &new_client, (void *)newClient);
+                sleep(1);
+            } else {
+                printf("Erreur accept fichier\n");
+                close(request);
+                free(newClient);
+                continue;
+            }
+        } else {
+            printf("Nombre maximal de client déjà atteint, request refusé\n");
+            close(request);
+        }
+    }
+
+    close(dS);
+    close(dS_file);
+    printf("Fin du programme\n");
+
+    return 0;
 }
