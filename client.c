@@ -8,9 +8,11 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <pthread.h>
+#include <dirent.h>
 
 //------------------------------------------
-#define MSG_SIZE 100 // Taille max du message
+#define MSG_SIZE 100               // Taille max du message
+#define FILE_DIR "./client_folder" // Dossier clients pour stocker les fichiers
 //------------------------------------------
 int flag = 0; // Gestion du signal
 int dS = 0;   // Descripteur de fichier du socket
@@ -49,17 +51,93 @@ void readFile()
   fclose(fp);
 }
 
-//***********************OUTDATE**************************
-// typedef struct
-// {
-//   int type;
-//   int taille;
-//   union
-//   {
-//     int i;
-//     char msg[MSG_SIZE];
-//   } info;
-// } data;
+//-----------------MODIFICATION POOMEDY------------------------------
+// Fonctions qui affiche les fichiers disponible dans le dossier client
+void list_files()
+{
+  DIR *d;
+  struct dirent *dir;
+  d = opendir(FILE_DIR);
+  if (d)
+  {
+    int i = 1;
+    while ((dir = readdir(d)) != NULL)
+    {
+      if (dir->d_type == DT_REG)
+      {
+        printf("%d: %s\n", i, dir->d_name);
+        i++;
+      }
+    }
+    closedir(d);
+  }
+  else
+  {
+    perror("Could not open directory");
+  }
+}
+
+// Fonction qui envoie le fichier au serveur
+void send_file()
+{
+  char filepath[512];
+  char filename[256];
+  char file_size_str[16];
+  int file_size;
+  FILE *file;
+
+  // Affiche les fichiers qu'on peut envoyer
+  printf("Fichiers disponibles:\n");
+  list_files();
+
+  // L'utilisatuer entre le nom du fichier
+  printf("Spécifiez le nom du fichier à envoyer: ");
+  fgets(filename, 256, stdin);
+  filename[strcspn(filename, "\n")] = 0;
+
+  // Etablie le lien complet du fichier
+  snprintf(filepath, sizeof(filepath), "%s/%s", FILE_DIR, filename);
+
+  // Ouverture du fichier
+  file = fopen(filepath, "rb");
+  if (!file)
+  {
+    perror("Fichier ne peut être ouvert\n");
+    return;
+  }
+
+  // Obteint la taille du fichier
+  fseek(file, 0, SEEK_END);
+  file_size = ftell(file);
+  fseek(file, 0, SEEK_SET);
+
+  // Envoie le nom du fichier au serveur
+  send(dS, filename, strlen(filename), 0);
+  send(dS, "\n", 1, 0);
+
+  // Envoie la taille du fichier
+  snprintf(file_size_str, sizeof(file_size_str), "%d", file_size);
+  send(dS, file_size_str, strlen(file_size_str), 0);
+  send(dS, "\n", 1, 0);
+
+  // Envoie le contenu du fichier
+  char buffer[1024];
+  int bytes_read;
+  while ((bytes_read = fread(buffer, 1, sizeof(buffer), file)) > 0)
+  {
+    if (send(dS, buffer, bytes_read, 0) == -1)
+    {
+      perror("Erreur pendant l'envoie du fichier");
+      fclose(file);
+      return;
+    }
+  }
+
+  // Ferme le fichier
+  fclose(file);
+  printf("Fichier envoyé avec succès.\n");
+}
+//-------------------------------------------------------------------
 
 // Gère la réception de messages
 void msg_recv()
@@ -112,6 +190,12 @@ void msg_send()
     {
       readFile();
     }
+    else if (strcmp(msg, "/file") == 0)
+    {
+      sprintf(buffer, "%s: %s\n", nom, msg);
+      send(dS, buffer, strlen(buffer), 0);
+      send_file();
+    }
     else
     {
       sprintf(buffer, "%s: %s\n", nom, msg);
@@ -122,6 +206,30 @@ void msg_send()
   }
   catch_ctrl_c_and_exit(2);
 }
+
+//-----------------MODIFICATION POOMEDY------------------------------
+// Gère la réception de la taille
+int taille_recv()
+{
+  int taille;
+  int response = recv(dS, &taille, sizeof(int), 0);
+  printf("Taille reçu: %d\n", taille);
+  if (response > 0)
+  {
+    taille = ntohl(taille);
+    return taille + 1;
+  }
+}
+
+// Gère l'envoi de la taille
+void taille_send(char *sortie)
+{
+  int taille = strlen(sortie);
+  taille = htonl(taille);
+  printf("Taille envoyé: %d\n", htonl(taille));
+  send(dS, &taille, sizeof(int), 0);
+}
+//-------------------------------------------------------------------
 
 int main(int argc, char *argv[])
 {
@@ -150,37 +258,10 @@ int main(int argc, char *argv[])
   }
   printf("Socket Connecté\n"); // reussite
 
-  //***********************OUTDATE**************************
-  // pthread_t sender;
-  // pthread_t receiver;
-  // int state = 1;
-  // data recv_data;
-
-  // if (pthread_create(&sender, NULL, msg_send, (void *)&dS) != 0)
-  // {
-  //   printf("erreur thread sender\n");
-  // }
-
-  // if (pthread_create(&receiver, NULL, msg_recv, (void *)&dS) != 0)
-  // {
-  //   printf("erreur thread receiver\n");
-  // }
-
-  // if (pthread_join(receiver, NULL) != 0)
-  // {
-  //   printf("Erreur lors de l'attente du thread 'receiver'");
-  //   exit(EXIT_FAILURE);
-  // }
-
-  // if (pthread_cancel(sender) != 0)
-  // {
-  //   perror("Erreur lors de l'annulation du thread 'sender'");
-  //   exit(EXIT_FAILURE);
-  // }
-
   while (1)
   {
     char msg_recv[32];
+    //-----------------MODIFICATION POOMEDY------------------------------
     printf("Veuillez entrer votre nom: ");
     fgets(nom, 32, stdin);
     int i;
@@ -192,15 +273,22 @@ int main(int argc, char *argv[])
         break;
       }
     }
-    send(dS, nom, 32, 0);      // Envoie le nom au serveur
+
+    // Envoie le nom au serveur
+    send(dS, nom, MSG_SIZE, 0);
+
+    // Réception du message du serveur
     memset(msg_recv, 0, MSG_SIZE);
-    recv(dS, msg_recv, 32, 0); // Attends la validation du serveur
-    printf("%s\n",msg_recv);
+    recv(dS, msg_recv, MSG_SIZE, 0); // Attends la validation du serveur
+    printf("%s\n", msg_recv);
     if (strcmp(msg_recv, "Nom correcte") == 0)
     {
       break;
     }
+
+    memset(msg_recv, 0, MSG_SIZE);
   }
+  //-------------------------------------------------------------------
 
   printf("*** Bienvenue ***\n");
   printf("*** Tapez /help pour voir toutes les commandes ***\n");
