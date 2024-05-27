@@ -199,10 +199,38 @@ char **get_name_and_message(char *s)
 
 // Fonction qui envoie un message privé au destinateur
 void send_message_priv(char *s, char *destinateur, int uid)
+{
+  int receiver_exist = 0;
+  pthread_mutex_lock(&clients_mutex);
+  for (int i = 0; i < MAX_CLIENT; ++i)
+  {
+    if (clientsTab[i])
+    {
+      if (strcmp(clientsTab[i]->nom, destinateur) == 0)
+      {
+        receiver_exist = 1;
+        if (write(clientsTab[i]->sockID, s, strlen(s)) < 0)
+        {
+          perror("ERREUR: Envoie du message échoué");
+          break;
+        }
+      }
+    }
+  }
+  //-----------------MODIFICATION POOMEDY------------------------------
+  if (receiver_exist == 0)
+  {
+    printf("Destinataire n'existe pas\n");
+    send_message_id("Destinataire n'existe pas\n", uid);
+  }
 
-    // ------------------- Modification Aloïs ------------------
-    // Fonction qui va fermer toutes les socket client et ds la socket serveur
-    void close_server()
+  //-------------------------------------------------------------------
+  pthread_mutex_unlock(&clients_mutex);
+}
+
+// ------------------- Modification Aloïs ------------------
+// Fonction qui va fermer toutes les socket client et ds la socket serveur
+void close_server()
 {
   pthread_mutex_lock(&clients_mutex);
   // Ferme toutes les socket client
@@ -230,34 +258,6 @@ void send_message_priv(char *s, char *destinateur, int uid)
   }
 }
 // ----------------- Fin modification Aloïs ----------------
-{
-  int receiver_exist = 0;
-  pthread_mutex_lock(&clients_mutex);
-  for (int i = 0; i < MAX_CLIENT; ++i)
-  {
-    if (clientsTab[i])
-    {
-      if (strcmp(clientsTab[i]->nom, destinateur) == 0)
-      {
-        receiver_exist = 1;
-        if (write(clientsTab[i]->sockID, s, strlen(s)) < 0)
-        {
-          perror("ERREUR: Envoie du message échoué");
-          break;
-        }
-      }
-    }
-  }
-  pthread_mutex_unlock(&clients_mutex);
-
-  //-----------------MODIFICATION POOMEDY------------------------------
-  if (receiver_exist == 0)
-  {
-    printf("Destinataire n'existe pas\n");
-    send_message_id("Destinataire n'existe pas\n", uid);
-  }
-}
-//-------------------------------------------------------------------
 
 //-----------------MODIFICATION POOMEDY------------------------------
 // Gére la réception de fichier du client
