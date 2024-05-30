@@ -230,33 +230,33 @@ void send_message_priv(char *s, char *destinateur, int uid)
 
 // ------------------- Modification Aloïs ------------------
 // Fonction qui va fermer toutes les socket client et ds la socket serveur
-void close_server()
-{
-  pthread_mutex_lock(&clients_mutex);
-  // Ferme toutes les socket client
-  for (int i = 0; i < MAX_CLIENT; ++i)
-  {
-    if (clientsTab[i])
-    {
-      if (close(clientsTab[i]->socket) == -1)
-      {
-        perror("Failed to close client socket");
-      }
-      free(clientsTab[i]);
-      clientsTab[i] = NULL;
-    }
-  }
-  pthread_mutex_unlock(&clients_mutex);
+// void close_server()
+// {
+//   pthread_mutex_lock(&clients_mutex);
+//   // Ferme toutes les socket client
+//   for (int i = 0; i < MAX_CLIENT; ++i)
+//   {
+//     if (clientsTab[i])
+//     {
+//       if (close(clientsTab[i]->sockID) == -1)
+//       {
+//         perror("Failed to close client socket");
+//       }
+//       free(clientsTab[i]);
+//       clientsTab[i] = NULL;
+//     }
+//   }
+//   pthread_mutex_unlock(&clients_mutex);
 
-  // Ferme dS (socket serveur)
-  if (dS != -1)
-  {
-    if (close(dS) == -1)
-    {
-      perror("Failed to close server socket");
-    }
-  }
-}
+//   // Ferme dS (socket serveur)
+//   if (dS != -1)
+//   {
+//     if (close(dS) == -1)
+//     {
+//       perror("Failed to close server socket");
+//     }
+//   }
+// }
 // ----------------- Fin modification Aloïs ----------------
 
 //-----------------MODIFICATION POOMEDY------------------------------
@@ -444,7 +444,7 @@ void *new_client(void *args)
 
           // Close the server
           // Assuming you have a function close_server that closes the server
-          close_server();
+          // close_server();
         }
         // ------------------- Fin modification Aloïs ------------------
         else
