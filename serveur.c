@@ -1,3 +1,8 @@
+/**
+ * @file serveur.c
+ * @brief Programme serveur de chat multi-client
+ */
+
 #include <stdio.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -9,33 +14,35 @@
 #include <semaphore.h>
 
 //------------------------------------------
-#define MSG_SIZE 100  // Taille max du message
-#define MAX_CLIENT 10 // Nombre max de clients
+#define MSG_SIZE 100  /**< Taille max du message */
+#define MAX_CLIENT 10 /**< Nombre max de clients */
 //------------------------------------------
-static unsigned int nb_client = 0; // Nombre de clients connectés
-static int uid = 10;               // Taille des identifiants(unique) de chaque client
+static unsigned int nb_client = 0; /**< Nombre de clients connectés */
+static int uid = 10;               /**< Taille des identifiants(unique) de chaque client */
 sem_t sem_client;
 
-// Vous pouvez lancer le programme avec "./serveur.sh", c'est un programme qui attribue automatiquement
-// un nouveau port au serveur et au client, bien sur le meme entre eux
-
-// Structure du client - Information sur eux
+/**
+ * Structure représentant un client
+ */
 typedef struct
 {
-  struct sockaddr_in address; // Adresse du client(adresse IP et le port du client)
+  struct sockaddr_in address; /**< Adresse du client (adresse IP et le port du client) */
   struct sockaddr_in address_file;
-  int sockID;    // Identifiant de la socket du client
-  int id_client; // Identifiant unique du client
-  char nom[64];  // Nom du client
+  int sockID;     /**< Identifiant de la socket du client */
+  int id_client;  /**< Identifiant unique du client */
+  char nom[64];   /**< Nom du client */
   int sockID_file;
   int id_client_file;
 } client;
 
-client *clientsTab[MAX_CLIENT]; // Tableau de tous les clients connectés
+client *clientsTab[MAX_CLIENT]; /**< Tableau de tous les clients connectés */
 
-pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER; // Initialisation d'un mutex pour synchroniser l'accès concurrentiel aux données des clients
+pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER; /**< Mutex pour synchroniser l'accès concurrentiel aux données des clients */
 
-// Fonction qui ajoute un nouveau client
+/**
+ * Ajoute un nouveau client au tableau
+ * @param nouveau_client Pointeur vers le nouveau client à ajouter
+ */
 void ajout_client(client *nouveau_client)
 {
   pthread_mutex_lock(&clients_mutex);
@@ -50,7 +57,10 @@ void ajout_client(client *nouveau_client)
   pthread_mutex_unlock(&clients_mutex);
 }
 
-// Fonction qui retire un client du tableau à l'aide de son identifiant
+/**
+ * Retire un client du tableau à l'aide de son identifiant
+ * @param uid Identifiant unique du client à retirer
+ */
 void retire_client(int uid)
 {
   pthread_mutex_lock(&clients_mutex);
@@ -69,7 +79,11 @@ void retire_client(int uid)
   pthread_mutex_unlock(&clients_mutex);
 }
 
-// Fonction qui envoie un message à tout le monde sauf au sender
+/**
+ * Envoie un message à tous les clients sauf au sender
+ * @param s Message à envoyer
+ * @param uid Identifiant unique du sender
+ */
 void send_message(char *s, int uid)
 {
   pthread_mutex_lock(&clients_mutex);
@@ -90,7 +104,11 @@ void send_message(char *s, int uid)
   pthread_mutex_unlock(&clients_mutex);
 }
 
-// Fonction qui envoie un message à l'id mis en param
+/**
+ * Envoie un message à un client spécifique
+ * @param s Message à envoyer
+ * @param uid Identifiant unique du destinataire
+ */
 void send_message_id(char *s, int uid)
 {
   pthread_mutex_lock(&clients_mutex);
@@ -111,7 +129,11 @@ void send_message_id(char *s, int uid)
   pthread_mutex_unlock(&clients_mutex);
 }
 
-// Vérifie s'il n'y a pas déjà un nom pareil dans le chat
+/**
+ * Vérifie si un nom est déjà utilisé par un autre client
+ * @param s Nom à vérifier
+ * @return 1 si le nom est déjà utilisé, sinon 0
+ */
 int check_name(char *s)
 {
   pthread_mutex_lock(&clients_mutex);
@@ -130,8 +152,12 @@ int check_name(char *s)
   return 0;
 }
 
-// ------------------------ Modification Aloïs -----------------------------
-// Vérifie si le message est un message privé ou une commande /list
+
+/**
+ * Vérifie si le message est un message privé ou une commande /list ou /close
+ * @param s Message à vérifier
+ * @return 1 si c'est un message privé, 2 si c'est la commande /list, 3 si c'est la commande /close, sinon 0
+ */
 int check_message(char *s)
 {
   char *input_msg = strdup(s);
@@ -159,9 +185,12 @@ int check_message(char *s)
     return 0;
   }
 }
-// ------------------------ Fin modification Aloïs -------------------------
 
-// Récupère le nom du destinataire et le message à envoyer
+/**
+ * Extrait le nom du destinataire et le message à envoyer
+ * @param s Message contenant le nom du destinataire et le message
+ * @return Un tableau de deux chaînes de caractères contenant le nom du destinataire et le message
+ */
 char **get_name_and_message(char *s)
 {
   char *input_msg = strdup(s);
@@ -199,7 +228,12 @@ char **get_name_and_message(char *s)
   return result;
 }
 
-// Fonction qui envoie un message privé au destinateur
+/**
+ * Envoie un message privé à un destinataire spécifique
+ * @param s Message à envoyer
+ * @param destinateur Nom du destinataire
+ * @param uid Identifiant unique de l'envoyeur
+ */
 void send_message_priv(char *s, char *destinateur, int uid)
 {
   int receiver_exist = 0;
@@ -249,7 +283,6 @@ void send_message_priv(char *s, char *destinateur, int uid)
 //     }
 //   }
 //   pthread_mutex_unlock(&clients_mutex);
-
 //   // Ferme dS (socket serveur)
 //   if (dS != -1)
 //   {
@@ -261,8 +294,11 @@ void send_message_priv(char *s, char *destinateur, int uid)
 // }
 // ----------------- Fin modification Aloïs ----------------
 
-//-----------------MODIFICATION POOMEDY------------------------------
-// Gére la réception de fichier du client
+/**
+ * Gère la réception de fichiers du client
+ * @param client_sock Socket du client
+ * @param filename Nom du fichier
+ */
 void receive_file(int client_sock, char *filename)
 {
   printf("filename : %s\n", filename);
@@ -320,7 +356,11 @@ void receive_file(int client_sock, char *filename)
   printf("Fichier %s reçu avec succès.\n", filename);
 }
 
-// Gère la réception de la taille
+/**
+ * Gère la réception de la taille d'un message
+ * @param uid Identifiant unique du client
+ * @return Taille du message
+ */
 int taille_recv(int uid)
 {
   int taille;
@@ -332,7 +372,11 @@ int taille_recv(int uid)
   }
 }
 
-// Gère l'envoi de la taille
+/**
+ * Gère l'envoi de la taille d'un message
+ * @param uid Identifiant unique du client
+ * @param sortie Chaîne de caractères à envoyer
+ */
 void taille_send(int uid, char *sortie)
 {
   int taille = strlen(sortie);
@@ -341,8 +385,10 @@ void taille_send(int uid, char *sortie)
 }
 //-------------------------------------------------------------------
 
-// Gère la communication entre les clients (envoie et réception)
-// Executer dans un thread séparé pour chaque client
+/**
+ * Fonction exécutée dans un thread séparé pour chaque client pour gérer la communication
+ * @param args Arguments passés au thread
+ */
 void *new_client(void *args)
 {
   char *file = (char *)malloc(sizeof(char) * 256); // fichier entrant
@@ -499,6 +545,8 @@ void *new_client(void *args)
   return NULL;
 }
 
+
+// Code principal du programme
 int main(int argc, char *argv[])
 {
   // Initialisation du sémaphore avec la valeur MAX_CLIENT

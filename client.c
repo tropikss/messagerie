@@ -1,3 +1,8 @@
+/**
+ * @file client.c
+ * @brief Programme client de chat multi-client
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,13 +27,19 @@ char nom[32]; // Nom du client
 // pareil que pour "serveur.sh", faites "./client.sh", ca recupere automatiquement votre IP (pour les tests)
 // et ca attribue tout seul un nouveau port
 
-// Client appuie sur Ctrl+C pour terminer le programme
+/**
+ * @brief Gère le signal lorsque le client appuie sur Ctrl+C et quitte le programme.
+ * 
+ * @param sig La valeur du signal.
+ */
 void catch_ctrl_c_and_exit(int sig)
 {
   flag = 1;
 }
 
-// Lecture du fichier texte
+/**
+ * @brief Lit et affiche le contenu du fichier "MANUEL.txt".
+ */
 void readFile()
 {
   char *filename = "MANUEL.txt";
@@ -52,8 +63,9 @@ void readFile()
   fclose(fp);
 }
 
-//-----------------MODIFICATION POOMEDY------------------------------
-// Fonctions qui affiche les fichiers disponible dans le dossier client
+/**
+ * @brief Affiche les fichiers disponibles dans le répertoire client_folder.
+ */
 void list_files()
 {
   DIR *d;
@@ -78,7 +90,9 @@ void list_files()
   }
 }
 
-// Fonction qui envoie le fichier au serveur
+/**
+ * @brief Envoie un fichier au serveur.
+ */
 void send_file() {
 
   char* filename = (char*)malloc(sizeof(char)*256);
@@ -162,9 +176,10 @@ void send_file() {
   fclose(file);
   printf("Fichier envoyé avec succès.\n");
 }
-//-------------------------------------------------------------------
 
-// Gère la réception de messages
+/**
+ * @brief Gère la réception de messages du serveur.
+ */
 void msg_recv()
 {
   char msg[MSG_SIZE] = {};
@@ -188,7 +203,9 @@ void msg_recv()
   }
 }
 
-// Gère l'envoi de messages
+/**
+ * @brief Gère l'envoi de messages au serveur.
+ */
 void msg_send()
 {
   char msg[MSG_SIZE] = {};
@@ -232,8 +249,13 @@ void msg_send()
   catch_ctrl_c_and_exit(2);
 }
 
-//-----------------MODIFICATION POOMEDY------------------------------
+//----------------------------------------------------------
 // Gère la réception de la taille
+/**
+ * @brief Gère la réception de la taille du fichier depuis le serveur.
+ * 
+ * @return int La taille du fichier.
+ */
 int taille_recv()
 {
   int taille;
@@ -246,6 +268,11 @@ int taille_recv()
   }
 }
 
+/**
+ * @brief Envoie la taille du message sortant au serveur.
+ * 
+ * @param sortie Le message sortant.
+ */
 // Gère l'envoi de la taille
 void taille_send(char *sortie)
 {
