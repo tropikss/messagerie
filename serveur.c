@@ -6,6 +6,7 @@
 #include <pthread.h>
 #include <signal.h>
 #include <unistd.h>
+#include <semaphore.h>
 
 //------------------------------------------
 #define MSG_SIZE 100  // Taille max du message
@@ -13,6 +14,7 @@
 //------------------------------------------
 static unsigned int nb_client = 0; // Nombre de clients connectés
 static int uid = 10;               // Taille des identifiants(unique) de chaque client
+sem_t sem_client;
 
 // Vous pouvez lancer le programme avec "./serveur.sh", c'est un programme qui attribue automatiquement
 // un nouveau port au serveur et au client, bien sur le meme entre eux
@@ -382,7 +384,7 @@ void *new_client(void *args)
 
     // Réception d'un message du client
     int receive = recv(data_client->sockID, message, MSG_SIZE, 0);
-    int receive_file_int = recv(data_client->sockID_file, file, sizeof(file), 0);
+    // int receive_file_int = recv(data_client->sockID_file, file, sizeof(file), 0);
 
     if (receive > 0)
     { // Messages normaux ou privés
@@ -479,10 +481,10 @@ void *new_client(void *args)
       state = 1;
     }
 
-    if (receive_file_int > 0)
-    {
-      receive_file(data_client->sockID_file, file);
-    }
+    // if (receive_file_int > 0)
+    // {
+    //   receive_file(data_client->sockID_file, file);
+    // }
 
     memset(message, 0, MSG_SIZE);
   }
@@ -492,13 +494,20 @@ void *new_client(void *args)
   retire_client(data_client->id_client); // Suppression du client de la file d'attente
   free(data_client);                     // Libération de la mémoire
   nb_client--;                           // Décrémentation du nombre total de clients
+  sem_post(&sem_client);                 // Libère une place sur le sémaphore
   pthread_detach(pthread_self());
-
   return NULL;
 }
 
 int main(int argc, char *argv[])
 {
+  // Initialisation du sémaphore avec la valeur MAX_CLIENT
+  if (sem_init(&sem_client, 0, MAX_CLIENT) != 0)
+  {
+    perror("Erreur lors de l'initialisation du sémaphore");
+    exit(EXIT_FAILURE);
+  }
+
   int port = atoi(argv[1]);
   int file_port = atoi(argv[2]);
 
@@ -580,6 +589,10 @@ int main(int argc, char *argv[])
   {
     socklen_t lg = sizeof(sock_client);
     socklen_t lg_file = sizeof(sock_client_file);
+
+    // Attendre qu'une place se libère
+    sem_wait(&sem_client);
+
     client *newClient = (client *)malloc(sizeof(client));
 
     int request = accept(dS, (struct sockaddr *)&sock_client, &lg); // on attend une connexion
@@ -632,9 +645,13 @@ int main(int argc, char *argv[])
     {
       printf("Nombre maximal de client déjà atteint, request refusé\n");
       close(request);
+      // Libère le sémaphore si la connexion est refusée
+      sem_post(&sem_client);
     }
   }
 
+  // Libère les ressources
+  sem_destroy(&sem_client);
   close(dS);
   close(dS_file);
   printf("Fin du programme\n");
