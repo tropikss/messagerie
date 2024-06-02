@@ -88,15 +88,13 @@ void send_file() {
   printf("Fichiers disponibles:\n");
   list_files();
 
-  // L'utilisatuer entre le nom du fichier
+  // L'utilisateur entre le nom du fichier
   printf("Spécifiez le nom du fichier à envoyer: ");
   fgets(filename, 256, stdin);
   filename[strcspn(filename, "\n")] = 0;
   printf("Nom du fichier : %s\n", filename);
 
-  send(dS_file, filename, strlen(filename), 0);
-
-  char* filepath = (char*)malloc(sizeof(char)*512);
+    char* filepath = (char*)malloc(sizeof(char)*512);
 
   // Etablie le lien complet du fichier
   snprintf(filepath, sizeof(char)*512, "%s/%s", FILE_DIR, filename);
@@ -109,6 +107,61 @@ void send_file() {
   {
     perror("Fichier ne peut être ouvert\n");
     return;
+  }
+
+  // Envoie l'info au serveur que l'on veut lui envoyer un fichier
+  int tosend = 1;
+  send(dS_file, &tosend, sizeof(int), 0);
+
+  // Envoie la taille du nom du fichier
+  int filename_length = strlen(filename);
+  printf("Taille du nom du fichier : %i\n", filename_length);
+
+  send(dS_file, &filename_length, sizeof(int), 0);
+
+  // Envoie le nom du fichier
+  send(dS_file, filename, filename_length, 0);
+
+  int response;
+  recv(dS_file, &response, sizeof(int), 0);
+  if(response) {
+    printf("%s\n","Nom ok");
+  } else {
+    printf("%s\n", "Nom deja existant");
+
+    int response = 0;
+
+    // Demande à l'utilisateur s'il veut remplacer le fichier
+    char resp[3];  // Tampon pour la réponse de l'utilisateur
+    printf("Voulez-vous remplacer le fichier ? (Y/N) : ");
+    if (fgets(resp, sizeof(resp), stdin) != NULL) {
+        // Enlever le caractère de nouvelle ligne, s'il existe
+        size_t len = strlen(resp);
+        if (len > 0 && resp[len-1] == '\n') {
+            resp[len-1] = '\0';
+        }
+
+        // Vérifier la réponse de l'utilisateur
+        if (strcmp(resp, "Y") == 0 || strcmp(resp, "y") == 0) {
+            response = 1;
+            printf("Le fichier sera remplacé.\n");
+            // Ajouter le code pour remplacer le fichier ici
+        } else if (strcmp(resp, "N") == 0 || strcmp(resp, "n") == 0) {
+            printf("Le fichier ne sera pas remplacé.\n");
+            // Ajouter le code pour ne pas remplacer le fichier ici
+        } else {
+            printf("Réponse non valide. Le fichier ne sera pas remplacé.\n");
+            // Ajouter le code pour gérer une réponse non valide ici
+        }
+
+        send(dS_file, &response, sizeof(int), 0);
+        if(!response) {
+          return;
+        }
+    } else {
+        fprintf(stderr, "Erreur de lecture de la réponse.\n");
+        return;
+    }
   }
 
   // Obteint la taille du fichier
@@ -188,6 +241,136 @@ void msg_recv()
   }
 }
 
+void receive_file() {
+
+  int file_size;
+  FILE *file;
+  char *buffer = (char *)malloc(sizeof(char) * 1024);
+  char filename[256];
+
+  // L'utilisateur entre le nom du fichier
+  printf("Spécifiez le nom du fichier à envoyer: ");
+  fgets(filename, 256, stdin);
+  filename[strcspn(filename, "\n")] = 0;
+  printf("Nom du fichier : %s\n", filename);
+
+  const char *base_path = "./client_folder/";
+    
+    // Allouer un tampon suffisamment grand pour contenir le chemin complet
+    char *full_path = malloc(strlen(base_path) + strlen(filename) + 1);
+    if (full_path == NULL) {
+        fprintf(stderr, "Erreur d'allocation mémoire\n");
+        return;
+    }
+    
+    // Copier la chaîne de base dans le tampon
+    strcpy(full_path, base_path);
+    
+    // Concaténer la chaîne filename au tampon
+    strcat(full_path, filename);
+    
+    // Afficher le chemin complet
+    printf("Chemin : %s\n", full_path);
+
+  // Vérifier si le fichier existe
+  if (access(full_path, F_OK) != -1) {
+    printf("Le fichier existe deja.\n");
+
+    int response = 0;
+
+    // Demande à l'utilisateur s'il veut remplacer le fichier
+    char resp[3];  // Tampon pour la réponse de l'utilisateur
+    printf("Voulez-vous remplacer le fichier ? (Y/N) : ");
+    if (fgets(resp, sizeof(resp), stdin) != NULL) {
+        // Enlever le caractère de nouvelle ligne, s'il existe
+        size_t len = strlen(resp);
+        if (len > 0 && resp[len-1] == '\n') {
+            resp[len-1] = '\0';
+        }
+
+        // Vérifier la réponse de l'utilisateur
+        if (strcmp(resp, "Y") == 0 || strcmp(resp, "y") == 0) {
+            response = 1;
+            printf("Le fichier sera remplacé.\n");
+            // Ajouter le code pour remplacer le fichier ici
+        } else if (strcmp(resp, "N") == 0 || strcmp(resp, "n") == 0) {
+            printf("Le fichier ne sera pas remplacé.\n");
+            // Ajouter le code pour ne pas remplacer le fichier ici
+        } else {
+            printf("Réponse non valide. Le fichier ne sera pas remplacé.\n");
+            // Ajouter le code pour gérer une réponse non valide ici
+        }
+    } else {
+        fprintf(stderr, "Erreur de lecture de la réponse.\n");
+        return;
+    }
+
+    printf("response : %d\n", response);
+    if(!response) {
+      return;
+    }
+  } else {
+    // Le fichier n'existe pas
+    int response = 1;
+
+    printf("Le fichier n'existe pas.\n");
+  }
+
+  // Envoie au serveur que le client est prêt à recevoir un fichier
+  // 0 = client prêt à recevoir un fichier
+  int tosend = 0;
+  send(dS_file, &tosend, sizeof(int), 0);
+
+  int name_size = strlen(filename);
+  send(dS_file, &name_size, sizeof(int), 0);
+  printf("name_size : %d\n", name_size);
+
+  send(dS_file, filename, name_size, 0);
+  printf("filename : %s\n", filename);
+
+  int response;
+  recv(dS_file, &response, sizeof(int), 0);
+
+  if(response == 1) {
+    printf("Nom correcte\n");
+  } else {
+    printf("Le fichier n'existe pas.\n");
+    return;
+  }
+
+  // Reçoit la taille du fichier
+  recv(dS_file, &file_size, sizeof(int), 0);
+  printf("File size : %i\n", file_size);
+
+  // Ouverture du fichier pour l'écriture
+  char filepath[512];
+  snprintf(filepath, sizeof(filepath), "./client_folder/%s", filename);
+  file = fopen(filepath, "wb");
+
+  if (!file)
+  {
+    perror("Fichier ne peut être ouvert");
+    return;
+  }
+
+  // Reçoit le contenu du fichier
+  int total_received = 0;
+  while (total_received < file_size)
+  {
+    int bytes_received = recv(dS_file, buffer, sizeof(buffer), 0);
+    if (bytes_received <= 0) {
+      break;
+    }
+    fwrite(buffer, 1, bytes_received, file);
+    total_received += bytes_received;
+    printf("Reçu: %d/%i octets\n", total_received, file_size);
+  }
+
+  fclose(file);
+  printf("Fichier %s reçu avec succès.\n", filename);
+}
+
+
 // Gère l'envoi de messages
 void msg_send()
 {
@@ -219,7 +402,18 @@ void msg_send()
     {
       sprintf(buffer, "%s: %s\n", nom, msg);
       send(dS, buffer, strlen(buffer), 0);
-      send_file();
+      int choice;
+      printf("Voulez-vous envoyer (1) ou recevoir (2) un fichier ? ");
+      fgets(buffer, sizeof(buffer), stdin);
+      sscanf(buffer, "%d", &choice);
+
+      if (choice == 1) {
+        send_file();
+      } else if (choice == 2) {
+        receive_file();
+      } else {
+        printf("Choix invalide.\n");
+      }
     }
     else
     {
@@ -298,7 +492,7 @@ int main(int argc, char *argv[]) {
     printf("Pas de serveur trouvé\n"); // echec
     exit(1);
   }
-  printf("Socket fichier connecté\n"); // reussite
+  printf("Socket client connecté\n"); // reussite
 
   if (connect(dS_file, (struct sockaddr *)&aS_file, lgA_file) == -1) // tentative connexion au serveur
   {
