@@ -13,6 +13,7 @@
 //------------------------------------------
 static unsigned int nb_client = 0; // Nombre de clients connectés
 static int uid = 10;               // Taille des identifiants(unique) de chaque client
+int dS;                            // Je met la socket du serveur en global pour pouvoir l'utiliser dans close_server()
 
 // Vous pouvez lancer le programme avec "./serveur.sh", c'est un programme qui attribue automatiquement
 // un nouveau port au serveur et au client, bien sur le meme entre eux
@@ -228,37 +229,6 @@ void send_message_priv(char *s, char *destinateur, int uid)
   pthread_mutex_unlock(&clients_mutex);
 }
 
-// ------------------- Modification Aloïs ------------------
-// Fonction qui va fermer toutes les socket client et ds la socket serveur
-void close_server()
-{
-  pthread_mutex_lock(&clients_mutex);
-  // Ferme toutes les socket client
-  for (int i = 0; i < MAX_CLIENT; ++i)
-  {
-    if (clientsTab[i])
-    {
-      if (close(clientsTab[i]->socket) == -1)
-      {
-        perror("Failed to close client socket");
-      }
-      free(clientsTab[i]);
-      clientsTab[i] = NULL;
-    }
-  }
-  pthread_mutex_unlock(&clients_mutex);
-
-  // Ferme dS (socket serveur)
-  if (dS != -1)
-  {
-    if (close(dS) == -1)
-    {
-      perror("Failed to close server socket");
-    }
-  }
-}
-// ----------------- Fin modification Aloïs ----------------
-
 //-----------------MODIFICATION POOMEDY------------------------------
 // Gére la réception de fichier du client
 void receive_file(int client_sock, char *filename)
@@ -339,9 +309,14 @@ void taille_send(int uid, char *sortie)
 }
 //-------------------------------------------------------------------
 
-// Gère la communication entre les clients (envoie et réception)
-// Executer dans un thread séparé pour chaque client
-void *new_client(void *args)
+// ------------------- Modification Aloïs ------------------
+// Fonction prototype
+void close_server()
+    // ----------------- Fin modification Aloïs ----------------
+
+    // Gère la communication entre les clients (envoie et réception)
+    // Executer dans un thread séparé pour chaque client
+    void *new_client(void *args)
 {
   char *file = (char *)malloc(sizeof(char) * 256); // fichier entrant
   char message[MSG_SIZE];                          // Message sortant
@@ -507,7 +482,7 @@ int main(int argc, char *argv[])
 
   printf("Début programme\n");
 
-  int dS = socket(PF_INET, SOCK_STREAM, 0);
+  dS = socket(AF_INET, SOCK_STREAM, 0);
   //---------------------- Modification Aloïs ---------------------------
   if (dS == -1)
   {
@@ -641,3 +616,34 @@ int main(int argc, char *argv[])
 
   return 0;
 }
+
+// ------------------- Modification Aloïs ------------------
+// Fonction qui va fermer toutes les socket client et ds la socket serveur
+void close_server()
+{
+  pthread_mutex_lock(&clients_mutex);
+  // Ferme toutes les socket client
+  for (int i = 0; i < MAX_CLIENT; ++i)
+  {
+    if (clientsTab[i])
+    {
+      if (close(clientsTab[i]->socket) == -1)
+      {
+        perror("Failed to close client socket");
+      }
+      free(clientsTab[i]);
+      clientsTab[i] = NULL;
+    }
+  }
+  pthread_mutex_unlock(&clients_mutex);
+
+  // Ferme dS (socket serveur)
+  if (dS != -1)
+  {
+    if (close(dS) == -1)
+    {
+      perror("Failed to close server socket");
+    }
+  }
+}
+// ----------------- Fin modification Aloïs ----------------
