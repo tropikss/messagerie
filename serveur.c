@@ -14,8 +14,11 @@
 #include <semaphore.h>
 
 //------------------------------------------
-#define MSG_SIZE 100  /**< Taille max du message */
+#define MSG_SIZE 256  /**< Taille max du message */
 #define MAX_CLIENT 10 /**< Nombre max de clients */
+
+#define MAX_CHAINES 10           /**< Nombre max de chaînes créées */
+#define MAX_CLIENTS_PAR_CHAINE 2 /**< Nombre max de clients par chaînes */
 //------------------------------------------
 static unsigned int nb_client = 0; /**< Nombre de clients connectés */
 static int uid = 10;               /**< Taille des identifiants(unique) de chaque client */
@@ -28,9 +31,10 @@ typedef struct
 {
   struct sockaddr_in address; /**< Adresse du client (adresse IP et le port du client) */
   struct sockaddr_in address_file;
-  int sockID;     /**< Identifiant de la socket du client */
-  int id_client;  /**< Identifiant unique du client */
-  char nom[64];   /**< Nom du client */
+  int sockID;                                 /**< Identifiant de la socket du client */
+  int id_client;                              /**< Identifiant unique du client */
+  char nom[64];                               /**< Nom du client */
+  struct chaine_discussion *chaine_connectee; // Pointeur vers la chaîne à laquelle le client est connecté
   int sockID_file;
   int id_client_file;
 } client;
@@ -38,6 +42,56 @@ typedef struct
 client *clientsTab[MAX_CLIENT]; /**< Tableau de tous les clients connectés */
 
 pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER; /**< Mutex pour synchroniser l'accès concurrentiel aux données des clients */
+
+/**
+ * Structure représentant une chaîne de discussion
+ */
+typedef struct chaine_discussion
+{
+  char nom[64];
+  char description[256];
+  client *clients[MAX_CLIENTS_PAR_CHAINE];
+  int nb_clients;
+} chaine_discussion;
+
+chaine_discussion chaines[MAX_CHAINES];
+int nb_chaines = 0;
+
+pthread_mutex_t chaines_mutex = PTHREAD_MUTEX_INITIALIZER; /**< Mutex pour synchroniser l'accès concurrentiel aux chaînes de discussion */
+
+/**
+ * Initialiser les chaînes de discussion au démarrage
+ */
+void init_chaines()
+{
+  pthread_mutex_lock(&chaines_mutex);
+  // Initialiser quelques chaînes pour l'exemple
+  for (int i = 0; i < MAX_CHAINES; ++i)
+  {
+    snprintf(chaines[i].nom, sizeof(chaines[i].nom), "Chaine %d", i + 1);
+    snprintf(chaines[i].description, sizeof(chaines[i].description), "Description de la chaîne %d", i + 1);
+    chaines[i].nb_clients = 0;
+    nb_chaines++;
+  }
+  pthread_mutex_unlock(&chaines_mutex);
+}
+
+/**
+ * Lister les chaînes disponibles pour un client
+ * * @param sock Identifiant unique du client à aui afficher la liste
+ */
+void liste_chaines(int sock)
+{
+  char buffer[1024];
+  pthread_mutex_lock(&chaines_mutex);
+  for (int i = 0; i < nb_chaines; ++i)
+  {
+    snprintf(buffer, sizeof(buffer), "Nom: %s, Description: %s, Clients: %d/%d\n",
+             chaines[i].nom, chaines[i].description, chaines[i].nb_clients, MAX_CLIENTS_PAR_CHAINE);
+    send(sock, buffer, strlen(buffer), 0);
+  }
+  pthread_mutex_unlock(&chaines_mutex);
+}
 
 /**
  * Ajoute un nouveau client au tableau
@@ -152,7 +206,6 @@ int check_name(char *s)
   return 0;
 }
 
-
 /**
  * Vérifie si le message est un message privé ou une commande /list ou /close
  * @param s Message à vérifier
@@ -179,6 +232,10 @@ int check_message(char *s)
   else if (strcmp(command1, "/close") == 0) // Vérifie si c'est /close
   {
     return 3;
+  }
+  else if (strcmp(command1, "/chaine") == 0) // Vérifie si c'est /chaine
+  {
+    return 4;
   }
   else
   {
@@ -253,14 +310,12 @@ void send_message_priv(char *s, char *destinateur, int uid)
       }
     }
   }
-  //-----------------MODIFICATION POOMEDY------------------------------
   if (receiver_exist == 0)
   {
     printf("Destinataire n'existe pas\n");
     send_message_id("Destinataire n'existe pas\n", uid);
   }
 
-  //-------------------------------------------------------------------
   pthread_mutex_unlock(&clients_mutex);
 }
 
@@ -383,7 +438,6 @@ void taille_send(int uid, char *sortie)
   printf("Taille envoyé: %d\n", taille);
   send(uid, &taille + 1, sizeof(int), 0);
 }
-//-------------------------------------------------------------------
 
 /**
  * Fonction exécutée dans un thread séparé pour chaque client pour gérer la communication
@@ -494,11 +548,68 @@ void *new_client(void *args)
           // Assuming you have a function close_server that closes the server
           // close_server();
         }
+        else if (check_message(message) == 4) // c'est la commande /chaine
+        {
+          // Envois des noms des chaines disponibles
+          liste_chaines(data_client->sockID);
+          char nom_chaine[64];
+          // Réception du nom de la chaîne de discussion
+          if (recv(data_client->sockID, nom_chaine, sizeof(nom_chaine), 0) > 0)
+          {
+            pthread_mutex_lock(&chaines_mutex);
+            int i;
+            for (i = 0; i < nb_chaines; ++i)
+            {
+              char *input_msg1 = strdup(nom_chaine);
+              char *command1 = strtok(input_msg1, " ");
+              command1 = strtok(NULL, "\n");
+              if (strcmp(chaines[i].nom, command1) == 0 && chaines[i].nb_clients < MAX_CLIENTS_PAR_CHAINE)
+              {
+                chaines[i].clients[chaines[i].nb_clients++] = data_client;
+                data_client->chaine_connectee = &chaines[i];
+                sprintf(message, "%s a rejoint la chaîne %s\n", data_client->nom, chaines[i].nom);
+                printf("%s", message);
+                send_message(message, data_client->id_client);
+                break;
+              }
+            }
+            pthread_mutex_unlock(&chaines_mutex);
+            if (i == nb_chaines)
+            {
+              printf("Chaîne non trouvée ou pleine\n");
+              send_message_id("Chaîne non trouvée ou pleine\n", data_client->id_client);
+              state = 0;
+            }
+          }
+          else
+          {
+            printf("Erreur réception nom de la chaîne\n");
+            state = 0;
+          }
+        }
         // ------------------- Fin modification Aloïs ------------------
         else
         {
-          // Message normal
-          send_message(message, data_client->id_client);
+          // Envoyer le message à tous les clients de la même chaîne si le client s'est déjà connecté
+          pthread_mutex_lock(&chaines_mutex);
+          chaine_discussion *c = data_client->chaine_connectee;
+          if (c != NULL)
+          {
+            for (int j = 0; j < c->nb_clients; ++j)
+            {
+              printf("%d",c->clients[j]->id_client);
+              if (c->clients[j] != data_client)
+              {
+                send_message(message, c->clients[j]->id_client);
+              }
+            }
+            pthread_mutex_unlock(&chaines_mutex);
+          }
+          else
+          {
+            // Message normal
+            send_message(message, data_client->id_client);
+          }
           int i;
           for (i = 0; i < strlen(message); i++)
           { // trim \n
@@ -535,6 +646,26 @@ void *new_client(void *args)
     memset(message, 0, MSG_SIZE);
   }
 
+  // Retirer le client de la chaîne
+  pthread_mutex_lock(&chaines_mutex);
+  if (data_client->chaine_connectee != NULL)
+  {
+    chaine_discussion *c = data_client->chaine_connectee;
+    for (int j = 0; j < c->nb_clients; ++j)
+    {
+      if (c->clients[j] == data_client)
+      {
+        for (int k = j; k < c->nb_clients - 1; ++k)
+        {
+          c->clients[k] = c->clients[k + 1];
+        }
+        c->nb_clients--;
+        break;
+      }
+    }
+  }
+  pthread_mutex_unlock(&chaines_mutex);
+
   close(data_client->sockID); // Fermeture du socket du client
   strcpy(nom, "\n");
   retire_client(data_client->id_client); // Suppression du client de la file d'attente
@@ -545,7 +676,6 @@ void *new_client(void *args)
   return NULL;
 }
 
-
 // Code principal du programme
 int main(int argc, char *argv[])
 {
@@ -555,6 +685,8 @@ int main(int argc, char *argv[])
     perror("Erreur lors de l'initialisation du sémaphore");
     exit(EXIT_FAILURE);
   }
+
+  init_chaines(); // Initialiser les chaînes de discussion
 
   int port = atoi(argv[1]);
   int file_port = atoi(argv[2]);
