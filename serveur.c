@@ -353,27 +353,30 @@ void send_message_priv(char *s, char *destinateur, int uid)
 // }
 // ----------------- Fin modification Aloïs ----------------
 
-void send_file(int client_sock) {
+void send_file(int client_sock)
+{
 
   char filename[256];
   int name_size;
   FILE *file;
 
-  #define FILE_DIR "./server_folder"
+#define FILE_DIR "./server_folder"
 
   // Recevoir la taille du nom de fichier
-  if (recv(client_sock, &name_size, sizeof(int), 0) <= 0) {
-      perror("Erreur lors de la réception de la taille du nom de fichier");
-      return;
+  if (recv(client_sock, &name_size, sizeof(int), 0) <= 0)
+  {
+    perror("Erreur lors de la réception de la taille du nom de fichier");
+    return;
   }
   printf("name size : %i\n", name_size);
 
   // Recevoir le nom de fichier
-  if (recv(client_sock, filename, name_size, 0) <= 0) {
-      perror("Erreur lors de la réception du nom de fichier");
-      return;
+  if (recv(client_sock, filename, name_size, 0) <= 0)
+  {
+    perror("Erreur lors de la réception du nom de fichier");
+    return;
   }
-  filename[name_size] = '\0';  // Assurez-vous que le nom de fichier est bien terminé par un caractère nul
+  filename[name_size] = '\0'; // Assurez-vous que le nom de fichier est bien terminé par un caractère nul
   printf("filename : %s\n", filename);
 
   // Construire le chemin complet du fichier
@@ -385,12 +388,15 @@ void send_file(int client_sock) {
   file = fopen(filepath, "rb");
   int tosend;
 
-  if (!file) {
+  if (!file)
+  {
     tosend = 0;
     send(client_sock, &tosend, sizeof(int), 0);
     perror("Erreur lors de l'ouverture du fichier pour écriture");
     return;
-  } else {
+  }
+  else
+  {
     tosend = 1;
     send(client_sock, &tosend, sizeof(int), 0);
   }
@@ -398,26 +404,29 @@ void send_file(int client_sock) {
   printf("%s\n", "Nom deja existant");
 
   // Obteint la taille du fichier
-   if (fseek(file, 0, SEEK_END) != 0) {
-        perror("Erreur lors de la recherche de la fin du fichier");
-        fclose(file);
-        return;
-    }
+  if (fseek(file, 0, SEEK_END) != 0)
+  {
+    perror("Erreur lors de la recherche de la fin du fichier");
+    fclose(file);
+    return;
+  }
 
-    // Obtenir la position actuelle du pointeur de fichier (taille du fichier)
-    int file_size = ftell(file);
-    if (file_size == -1) {
-        perror("Erreur lors de l'obtention de la taille du fichier");
-        fclose(file);
-        return;
-    }
+  // Obtenir la position actuelle du pointeur de fichier (taille du fichier)
+  int file_size = ftell(file);
+  if (file_size == -1)
+  {
+    perror("Erreur lors de l'obtention de la taille du fichier");
+    fclose(file);
+    return;
+  }
 
-    // Revenir au début du fichier
-    if (fseek(file, 0, SEEK_SET) != 0) {
-        perror("Erreur lors du retour au début du fichier");
-        fclose(file);
-        return;
-    }
+  // Revenir au début du fichier
+  if (fseek(file, 0, SEEK_SET) != 0)
+  {
+    perror("Erreur lors du retour au début du fichier");
+    fclose(file);
+    return;
+  }
   printf("File size : %i\n", file_size);
 
   // Envoie la taille du fichier
@@ -429,19 +438,24 @@ void send_file(int client_sock) {
   ssize_t bytes_sent;
   size_t total_bytes_sent;
 
-  while ((bytes_read = fread(buffer, 1, sizeof(buffer), file)) > 0) {
-      total_bytes_sent = 0;
-      while (total_bytes_sent < bytes_read) {
-          bytes_sent = send(client_sock, buffer + total_bytes_sent, bytes_read - total_bytes_sent, 0);
-          if (bytes_sent == -1) {
-              perror("Erreur pendant l'envoi du fichier");
-              fclose(file);
-              return;
-          } else {
-            printf("Envoyé: %zu/%i octets\n", total_bytes_sent, file_size);
-          }
-          total_bytes_sent += bytes_sent;
+  while ((bytes_read = fread(buffer, 1, sizeof(buffer), file)) > 0)
+  {
+    total_bytes_sent = 0;
+    while (total_bytes_sent < bytes_read)
+    {
+      bytes_sent = send(client_sock, buffer + total_bytes_sent, bytes_read - total_bytes_sent, 0);
+      if (bytes_sent == -1)
+      {
+        perror("Erreur pendant l'envoi du fichier");
+        fclose(file);
+        return;
       }
+      else
+      {
+        printf("Envoyé: %zu/%i octets\n", total_bytes_sent, file_size);
+      }
+      total_bytes_sent += bytes_sent;
+    }
   }
 
   // Ferme le fichier
@@ -451,10 +465,10 @@ void send_file(int client_sock) {
 
 //-----------------MODIFICATION POOMEDY------------------------------
 /**
-* Gère la réception de fichiers du client
-* @param client_sock Socket du client
-* @param filename Nom du fichier
-*/
+ * Gère la réception de fichiers du client
+ * @param client_sock Socket du client
+ * @param filename Nom du fichier
+ */
 void receive_file(int client_sock)
 {
   int name_size;
@@ -473,26 +487,28 @@ void receive_file(int client_sock)
   recv(client_sock, filename, name_size, 0);
   printf("name : %s\n", filename);
 
-const char *base_path = "./server_folder/";
-    
-    // Allouer un tampon suffisamment grand pour contenir le chemin complet
-    char *full_path = malloc(strlen(base_path) + strlen(filename) + 1);
-    if (full_path == NULL) {
-        fprintf(stderr, "Erreur d'allocation mémoire\n");
-        return;
-    }
-    
-    // Copier la chaîne de base dans le tampon
-    strcpy(full_path, base_path);
-    
-    // Concaténer la chaîne filename au tampon
-    strcat(full_path, filename);
-    
-    // Afficher le chemin complet
-    printf("Chemin : %s\n", full_path);
+  const char *base_path = "./server_folder/";
+
+  // Allouer un tampon suffisamment grand pour contenir le chemin complet
+  char *full_path = malloc(strlen(base_path) + strlen(filename) + 1);
+  if (full_path == NULL)
+  {
+    fprintf(stderr, "Erreur d'allocation mémoire\n");
+    return;
+  }
+
+  // Copier la chaîne de base dans le tampon
+  strcpy(full_path, base_path);
+
+  // Concaténer la chaîne filename au tampon
+  strcat(full_path, filename);
+
+  // Afficher le chemin complet
+  printf("Chemin : %s\n", full_path);
 
   // Vérifier si le fichier existe
-  if (access(full_path, F_OK) != -1) {
+  if (access(full_path, F_OK) != -1)
+  {
     printf("Le fichier existe deja.\n");
 
     int response = 0;
@@ -503,10 +519,13 @@ const char *base_path = "./server_folder/";
     // Attente réponse confirmation client
     recv(client_sock, &response, sizeof(int), 0);
     printf("response : %d\n", response);
-    if(!response) {
+    if (!response)
+    {
       return;
     }
-  } else {
+  }
+  else
+  {
     // Le fichier n'existe pas
     int response = 1;
     send(client_sock, &response, sizeof(int), 0);
@@ -534,7 +553,8 @@ const char *base_path = "./server_folder/";
   while (total_received < file_size)
   {
     int bytes_received = recv(client_sock, buffer, sizeof(buffer), 0);
-    if (bytes_received <= 0) {
+    if (bytes_received <= 0)
+    {
       break;
     }
     fwrite(buffer, 1, bytes_received, file);
@@ -589,12 +609,15 @@ void *new_client(void *args)
 
   // Vérification du nom du client
   int valid = 1;
-  while (valid) {
-    if (recv(data_client->sockID, nom, 64, 0) <= 0 || strlen(nom) < 2 || strlen(nom) >= 64 - 1 || check_name(nom) == 1) {
+  while (valid)
+  {
+    if (recv(data_client->sockID, nom, 64, 0) <= 0 || strlen(nom) < 2 || strlen(nom) >= 64 - 1 || check_name(nom) == 1)
+    {
       printf("Nom incorrecte.\n");
       send_message_id("Nom incorrecte.", data_client->id_client);
     }
-    else {
+    else
+    {
       send_message_id("Nom correcte", data_client->id_client);
       strcpy(data_client->nom, nom);
       sprintf(message, "%s a rejoint le chat\n", data_client->nom);
@@ -606,9 +629,11 @@ void *new_client(void *args)
 
   memset(message, 0, MSG_SIZE);
 
-  while (1) {
+  while (1)
+  {
     // le client doit quiter le chat
-    if (state) {
+    if (state)
+    {
       break;
     }
 
@@ -617,7 +642,6 @@ void *new_client(void *args)
 
     int received_file;
     int receive_file_ask;
-
 
     if (receive > 0)
     { // Messages normaux ou privés
@@ -720,12 +744,15 @@ void *new_client(void *args)
             state = 0;
           }
         }
-        else if (check_message(message) == 5) // c'est la commande /file 
+        else if (check_message(message) == 5) // c'est la commande /file
         {
           receive_file_ask = recv(data_client->sockID_file, &received_file, sizeof(int), 0);
-          if(received_file == 0) {
+          if (received_file == 0)
+          {
             printf("Demande d'envoi de fichier\n");
-          } else {
+          }
+          else
+          {
             printf("Demande de reception de fichier\n");
           }
 
@@ -734,25 +761,9 @@ void *new_client(void *args)
         // ------------------- Fin modification Aloïs ------------------
         else
         {
-          // Envoyer le message à tous les clients de la même chaîne si le client s'est déjà connecté
-          pthread_mutex_lock(&chaines_mutex);
-          chaine_discussion *c = data_client->chaine_connectee;
-          if (c != NULL)
-          {
-            for (int j = 0; j < c->nb_clients; ++j)
-            {
-              if (c->clients[j] != data_client)
-              {
-                send_message(message, c->clients[j]->id_client);
-              }
-            }
-            pthread_mutex_unlock(&chaines_mutex);
-          }
-          else
-          {
-            // Message normal
-            send_message(message, data_client->id_client);
-          }
+          // Message normal
+          send_message(message, data_client->id_client);
+
           int i;
           for (i = 0; i < strlen(message); i++)
           { // trim \n
@@ -781,11 +792,15 @@ void *new_client(void *args)
       state = 1;
     }
 
-    if (receive_file_ask > 0) {
-      if(received_file == 0) {
+    if (receive_file_ask > 0)
+    {
+      if (received_file == 0)
+      {
         printf("Envoi de fichier\n");
         send_file(data_client->sockID_file);
-      } else {
+      }
+      else
+      {
         printf("Reception de fichier\n");
         receive_file(data_client->sockID_file);
       }
