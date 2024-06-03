@@ -1,3 +1,8 @@
+/**
+ * @file serveur.c
+ * @brief Programme serveur de chat multi-client
+ */
+
 #include <stdio.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -6,34 +11,92 @@
 #include <pthread.h>
 #include <signal.h>
 #include <unistd.h>
+#include <semaphore.h>
 
 //------------------------------------------
-#define MSG_SIZE 100  // Taille max du message
-#define MAX_CLIENT 10 // Nombre max de clients
+#define MSG_SIZE 256  /**< Taille max du message */
+#define MAX_CLIENT 10 /**< Nombre max de clients */
+
+#define MAX_CHAINES 10           /**< Nombre max de chaînes créées */
+#define MAX_CLIENTS_PAR_CHAINE 2 /**< Nombre max de clients par chaînes */
 //------------------------------------------
-static unsigned int nb_client = 0; // Nombre de clients connectés
-static int uid = 10;               // Taille des identifiants(unique) de chaque client
+static unsigned int nb_client = 0; /**< Nombre de clients connectés */
+static int uid = 10;               /**< Taille des identifiants(unique) de chaque client */
+sem_t sem_client;
 
-// Vous pouvez lancer le programme avec "./serveur.sh", c'est un programme qui attribue automatiquement
-// un nouveau port au serveur et au client, bien sur le meme entre eux
-
-// Structure du client - Information sur eux
+/**
+ * Structure représentant un client
+ */
 typedef struct
 {
-  struct sockaddr_in address; // Adresse du client(adresse IP et le port du client)
+  struct sockaddr_in address; /**< Adresse du client (adresse IP et le port du client) */
   struct sockaddr_in address_file;
-  int sockID;    // Identifiant de la socket du client
-  int id_client; // Identifiant unique du client
-  char nom[64];  // Nom du client
+  int sockID;                                 /**< Identifiant de la socket du client */
+  int id_client;                              /**< Identifiant unique du client */
+  char nom[64];                               /**< Nom du client */
+  struct chaine_discussion *chaine_connectee; // Pointeur vers la chaîne à laquelle le client est connecté
   int sockID_file;
   int id_client_file;
 } client;
 
-client *clientsTab[MAX_CLIENT]; // Tableau de tous les clients connectés
+client *clientsTab[MAX_CLIENT]; /**< Tableau de tous les clients connectés */
 
-pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER; // Initialisation d'un mutex pour synchroniser l'accès concurrentiel aux données des clients
+pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER; /**< Mutex pour synchroniser l'accès concurrentiel aux données des clients */
 
-// Fonction qui ajoute un nouveau client
+/**
+ * Structure représentant une chaîne de discussion
+ */
+typedef struct chaine_discussion
+{
+  char nom[64];
+  char description[256];
+  client *clients[MAX_CLIENTS_PAR_CHAINE];
+  int nb_clients;
+} chaine_discussion;
+
+chaine_discussion chaines[MAX_CHAINES];
+int nb_chaines = 0;
+
+pthread_mutex_t chaines_mutex = PTHREAD_MUTEX_INITIALIZER; /**< Mutex pour synchroniser l'accès concurrentiel aux chaînes de discussion */
+
+/**
+ * Initialiser les chaînes de discussion au démarrage
+ */
+void init_chaines()
+{
+  pthread_mutex_lock(&chaines_mutex);
+  // Initialiser quelques chaînes pour l'exemple
+  for (int i = 0; i < MAX_CHAINES; ++i)
+  {
+    snprintf(chaines[i].nom, sizeof(chaines[i].nom), "Chaine %d", i + 1);
+    snprintf(chaines[i].description, sizeof(chaines[i].description), "Description de la chaîne %d", i + 1);
+    chaines[i].nb_clients = 0;
+    nb_chaines++;
+  }
+  pthread_mutex_unlock(&chaines_mutex);
+}
+
+/**
+ * Lister les chaînes disponibles pour un client
+ * * @param sock Identifiant unique du client à aui afficher la liste
+ */
+void liste_chaines(int sock)
+{
+  char buffer[1024];
+  pthread_mutex_lock(&chaines_mutex);
+  for (int i = 0; i < nb_chaines; ++i)
+  {
+    snprintf(buffer, sizeof(buffer), "Nom: %s, Description: %s, Clients: %d/%d\n",
+             chaines[i].nom, chaines[i].description, chaines[i].nb_clients, MAX_CLIENTS_PAR_CHAINE);
+    send(sock, buffer, strlen(buffer), 0);
+  }
+  pthread_mutex_unlock(&chaines_mutex);
+}
+
+/**
+ * Ajoute un nouveau client au tableau
+ * @param nouveau_client Pointeur vers le nouveau client à ajouter
+ */
 void ajout_client(client *nouveau_client)
 {
   pthread_mutex_lock(&clients_mutex);
@@ -48,7 +111,10 @@ void ajout_client(client *nouveau_client)
   pthread_mutex_unlock(&clients_mutex);
 }
 
-// Fonction qui retire un client du tableau à l'aide de son identifiant
+/**
+ * Retire un client du tableau à l'aide de son identifiant
+ * @param uid Identifiant unique du client à retirer
+ */
 void retire_client(int uid)
 {
   pthread_mutex_lock(&clients_mutex);
@@ -67,7 +133,11 @@ void retire_client(int uid)
   pthread_mutex_unlock(&clients_mutex);
 }
 
-// Fonction qui envoie un message à tout le monde sauf au sender
+/**
+ * Envoie un message à tous les clients sauf au sender
+ * @param s Message à envoyer
+ * @param uid Identifiant unique du sender
+ */
 void send_message(char *s, int uid)
 {
   pthread_mutex_lock(&clients_mutex);
@@ -88,7 +158,11 @@ void send_message(char *s, int uid)
   pthread_mutex_unlock(&clients_mutex);
 }
 
-// Fonction qui envoie un message à l'id mis en param
+/**
+ * Envoie un message à un client spécifique
+ * @param s Message à envoyer
+ * @param uid Identifiant unique du destinataire
+ */
 void send_message_id(char *s, int uid)
 {
   pthread_mutex_lock(&clients_mutex);
@@ -109,7 +183,11 @@ void send_message_id(char *s, int uid)
   pthread_mutex_unlock(&clients_mutex);
 }
 
-// Vérifie s'il n'y a pas déjà un nom pareil dans le chat
+/**
+ * Vérifie si un nom est déjà utilisé par un autre client
+ * @param s Nom à vérifier
+ * @return 1 si le nom est déjà utilisé, sinon 0
+ */
 int check_name(char *s)
 {
   pthread_mutex_lock(&clients_mutex);
@@ -128,8 +206,11 @@ int check_name(char *s)
   return 0;
 }
 
-// ------------------------ Modification Aloïs -----------------------------
-// Vérifie si le message est un message privé ou une commande /list
+/**
+ * Vérifie si le message est un message privé ou une commande /list ou /close
+ * @param s Message à vérifier
+ * @return 1 si c'est un message privé, 2 si c'est la commande /list, 3 si c'est la commande /close, sinon 0
+ */
 int check_message(char *s)
 {
   char *input_msg = strdup(s);
@@ -152,6 +233,10 @@ int check_message(char *s)
   {
     return 3;
   }
+  else if (strcmp(command1, "/chaine") == 0) // Vérifie si c'est /chaine
+  {
+    return 4;
+  }
   else if (strcmp(command1, "/file") == 0) // Vérifie si c'est /file
   {
     return 5;
@@ -161,9 +246,12 @@ int check_message(char *s)
     return 0;
   }
 }
-// ------------------------ Fin modification Aloïs -------------------------
 
-// Récupère le nom du destinataire et le message à envoyer
+/**
+ * Extrait le nom du destinataire et le message à envoyer
+ * @param s Message contenant le nom du destinataire et le message
+ * @return Un tableau de deux chaînes de caractères contenant le nom du destinataire et le message
+ */
 char **get_name_and_message(char *s)
 {
   char *input_msg = strdup(s);
@@ -201,7 +289,12 @@ char **get_name_and_message(char *s)
   return result;
 }
 
-// Fonction qui envoie un message privé au destinateur
+/**
+ * Envoie un message privé à un destinataire spécifique
+ * @param s Message à envoyer
+ * @param destinateur Nom du destinataire
+ * @param uid Identifiant unique de l'envoyeur
+ */
 void send_message_priv(char *s, char *destinateur, int uid)
 {
   int receiver_exist = 0;
@@ -221,14 +314,12 @@ void send_message_priv(char *s, char *destinateur, int uid)
       }
     }
   }
-  //-----------------MODIFICATION POOMEDY------------------------------
   if (receiver_exist == 0)
   {
     printf("Destinataire n'existe pas\n");
     send_message_id("Destinataire n'existe pas\n", uid);
   }
 
-  //-------------------------------------------------------------------
   pthread_mutex_unlock(&clients_mutex);
 }
 
@@ -242,7 +333,7 @@ void send_message_priv(char *s, char *destinateur, int uid)
 //   {
 //     if (clientsTab[i])
 //     {
-//       if (close(clientsTab[i]->socket) == -1)
+//       if (close(clientsTab[i]->sockID) == -1)
 //       {
 //         perror("Failed to close client socket");
 //       }
@@ -251,7 +342,6 @@ void send_message_priv(char *s, char *destinateur, int uid)
 //     }
 //   }
 //   pthread_mutex_unlock(&clients_mutex);
-
 //   // Ferme dS (socket serveur)
 //   if (dS != -1)
 //   {
@@ -263,106 +353,9 @@ void send_message_priv(char *s, char *destinateur, int uid)
 // }
 // ----------------- Fin modification Aloïs ----------------
 
-void send_file(int client_sock) {
-
-  char filename[256];
-  int name_size;
-  FILE *file;
-
-  #define FILE_DIR "./server_folder"
-
-  // Recevoir la taille du nom de fichier
-  if (recv(client_sock, &name_size, sizeof(int), 0) <= 0) {
-      perror("Erreur lors de la réception de la taille du nom de fichier");
-      return;
-  }
-  printf("name size : %i\n", name_size);
-
-  // Recevoir le nom de fichier
-  if (recv(client_sock, filename, name_size, 0) <= 0) {
-      perror("Erreur lors de la réception du nom de fichier");
-      return;
-  }
-  filename[name_size] = '\0';  // Assurez-vous que le nom de fichier est bien terminé par un caractère nul
-  printf("filename : %s\n", filename);
-
-  // Construire le chemin complet du fichier
-  char filepath[512];
-  snprintf(filepath, sizeof(filepath), "%s/%s", FILE_DIR, filename);
-  printf("filepath : %s\n", filepath);
-
-  // Ouvrir le fichier en mode écriture binaire
-  file = fopen(filepath, "rb");
-  int tosend;
-
-  if (!file) {
-    tosend = 0;
-    send(client_sock, &tosend, sizeof(int), 0);
-    perror("Erreur lors de l'ouverture du fichier pour écriture");
-    return;
-  } else {
-    tosend = 1;
-    send(client_sock, &tosend, sizeof(int), 0);
-  }
-
-  printf("%s\n", "Nom deja existant");
-
-  // Obteint la taille du fichier
-   if (fseek(file, 0, SEEK_END) != 0) {
-        perror("Erreur lors de la recherche de la fin du fichier");
-        fclose(file);
-        return;
-    }
-
-    // Obtenir la position actuelle du pointeur de fichier (taille du fichier)
-    int file_size = ftell(file);
-    if (file_size == -1) {
-        perror("Erreur lors de l'obtention de la taille du fichier");
-        fclose(file);
-        return;
-    }
-
-    // Revenir au début du fichier
-    if (fseek(file, 0, SEEK_SET) != 0) {
-        perror("Erreur lors du retour au début du fichier");
-        fclose(file);
-        return;
-    }
-  printf("File size : %i\n", file_size);
-
-  // Envoie la taille du fichier
-  send(client_sock, &file_size, sizeof(int), 0);
-
-  // Envoie le contenu du fichier
-  char buffer[1024];
-  size_t bytes_read;
-  ssize_t bytes_sent;
-  size_t total_bytes_sent;
-
-  while ((bytes_read = fread(buffer, 1, sizeof(buffer), file)) > 0) {
-      total_bytes_sent = 0;
-      while (total_bytes_sent < bytes_read) {
-          bytes_sent = send(client_sock, buffer + total_bytes_sent, bytes_read - total_bytes_sent, 0);
-          if (bytes_sent == -1) {
-              perror("Erreur pendant l'envoi du fichier");
-              fclose(file);
-              return;
-          } else {
-            printf("Envoyé: %zu/%i octets\n", total_bytes_sent, file_size);
-          }
-          total_bytes_sent += bytes_sent;
-      }
-  }
-
-  // Ferme le fichier
-  fclose(file);
-  printf("Fichier envoyé avec succès.\n");
-}
-
-
 //-----------------MODIFICATION POOMEDY------------------------------
 // Gére la réception de fichier du client
-void receive_file(int client_sock)
+void receive_file(int client_sock, char *filename)
 {
   int name_size;
   recv(client_sock, &name_size, sizeof(int), 0);
@@ -453,7 +446,11 @@ const char *base_path = "./server_folder/";
   printf("Fichier %s reçu avec succès.\n", filename);
 }
 
-// Gère la réception de la taille
+/**
+ * Gère la réception de la taille d'un message
+ * @param uid Identifiant unique du client
+ * @return Taille du message
+ */
 int taille_recv(int uid)
 {
   int taille;
@@ -465,17 +462,25 @@ int taille_recv(int uid)
   }
 }
 
-// Gère l'envoi de la taille
-void taille_send(int uid, char *sortie) {
+/**
+ * Gère l'envoi de la taille d'un message
+ * @param uid Identifiant unique du client
+ * @param sortie Chaîne de caractères à envoyer
+ */
+void taille_send(int uid, char *sortie)
+{
   int taille = strlen(sortie);
   printf("Taille envoyé: %d\n", taille);
   send(uid, &taille + 1, sizeof(int), 0);
 }
-//-------------------------------------------------------------------
 
-// Gère la communication entre les clients (envoie et réception)
-// Executer dans un thread séparé pour chaque client
-void *new_client(void *args) {
+/**
+ * Fonction exécutée dans un thread séparé pour chaque client pour gérer la communication
+ * @param args Arguments passés au thread
+ */
+void *new_client(void *args)
+{
+  char *file = (char *)malloc(sizeof(char) * 256); // fichier entrant
   char message[MSG_SIZE];                          // Message sortant
   char nom[64];                                    // Nom du client
   int state = 0;                                   // Indique si le client quitte la convo
@@ -574,7 +579,46 @@ void *new_client(void *args) {
 
           // Close the server
           // Assuming you have a function close_server that closes the server
-          // close_server();
+          // // close_server();
+        }
+        else if (check_message(message) == 4) // c'est la commande /chaine
+        {
+          // Envois des noms des chaines disponibles
+          liste_chaines(data_client->sockID);
+          char nom_chaine[64];
+          // Réception du nom de la chaîne de discussion
+          if (recv(data_client->sockID, nom_chaine, sizeof(nom_chaine), 0) > 0)
+          {
+            pthread_mutex_lock(&chaines_mutex);
+            int i;
+            for (i = 0; i < nb_chaines; ++i)
+            {
+              char *input_msg1 = strdup(nom_chaine);
+              char *command1 = strtok(input_msg1, " ");
+              command1 = strtok(NULL, "\n");
+              if (strcmp(chaines[i].nom, command1) == 0 && chaines[i].nb_clients < MAX_CLIENTS_PAR_CHAINE)
+              {
+                chaines[i].clients[chaines[i].nb_clients++] = data_client;
+                data_client->chaine_connectee = &chaines[i];
+                sprintf(message, "%s a rejoint la chaîne %s\n", data_client->nom, chaines[i].nom);
+                printf("%s", message);
+                send_message(message, data_client->id_client);
+                break;
+              }
+            }
+            pthread_mutex_unlock(&chaines_mutex);
+            if (i == nb_chaines)
+            {
+              printf("Chaîne non trouvée ou pleine\n");
+              send_message_id("Chaîne non trouvée ou pleine\n", data_client->id_client);
+              state = 0;
+            }
+          }
+          else
+          {
+            printf("Erreur réception nom de la chaîne\n");
+            state = 0;
+          }
         }
         else if (check_message(message) == 5) // c'est la commande /file 
         {
@@ -590,8 +634,26 @@ void *new_client(void *args) {
         // ------------------- Fin modification Aloïs ------------------
         else
         {
-          // Message normal
-          send_message(message, data_client->id_client);
+          // Envoyer le message à tous les clients de la même chaîne si le client s'est déjà connecté
+          pthread_mutex_lock(&chaines_mutex);
+          chaine_discussion *c = data_client->chaine_connectee;
+          if (c != NULL)
+          {
+            for (int j = 0; j < c->nb_clients; ++j)
+            {
+              printf("%d",c->clients[j]->id_client);
+              if (c->clients[j] != data_client)
+              {
+                send_message(message, c->clients[j]->id_client);
+              }
+            }
+            pthread_mutex_unlock(&chaines_mutex);
+          }
+          else
+          {
+            // Message normal
+            send_message(message, data_client->id_client);
+          }
           int i;
           for (i = 0; i < strlen(message); i++)
           { // trim \n
@@ -634,18 +696,48 @@ void *new_client(void *args) {
     memset(message, 0, MSG_SIZE);
   }
 
+  // Retirer le client de la chaîne
+  pthread_mutex_lock(&chaines_mutex);
+  if (data_client->chaine_connectee != NULL)
+  {
+    chaine_discussion *c = data_client->chaine_connectee;
+    for (int j = 0; j < c->nb_clients; ++j)
+    {
+      if (c->clients[j] == data_client)
+      {
+        for (int k = j; k < c->nb_clients - 1; ++k)
+        {
+          c->clients[k] = c->clients[k + 1];
+        }
+        c->nb_clients--;
+        break;
+      }
+    }
+  }
+  pthread_mutex_unlock(&chaines_mutex);
+
   close(data_client->sockID); // Fermeture du socket du client
   strcpy(nom, "\n");
   retire_client(data_client->id_client); // Suppression du client de la file d'attente
   free(data_client);                     // Libération de la mémoire
   nb_client--;                           // Décrémentation du nombre total de clients
+  sem_post(&sem_client);                 // Libère une place sur le sémaphore
   pthread_detach(pthread_self());
-
   return NULL;
 }
 
+// Code principal du programme
 int main(int argc, char *argv[])
 {
+  // Initialisation du sémaphore avec la valeur MAX_CLIENT
+  if (sem_init(&sem_client, 0, MAX_CLIENT) != 0)
+  {
+    perror("Erreur lors de l'initialisation du sémaphore");
+    exit(EXIT_FAILURE);
+  }
+
+  init_chaines(); // Initialiser les chaînes de discussion
+
   int port = atoi(argv[1]);
   int file_port = atoi(argv[2]);
 
@@ -727,6 +819,10 @@ int main(int argc, char *argv[])
   {
     socklen_t lg = sizeof(sock_client);
     socklen_t lg_file = sizeof(sock_client_file);
+
+    // Attendre qu'une place se libère
+    sem_wait(&sem_client);
+
     client *newClient = (client *)malloc(sizeof(client));
 
     int request = accept(dS, (struct sockaddr *)&sock_client, &lg); // on attend une connexion
@@ -779,9 +875,13 @@ int main(int argc, char *argv[])
     {
       printf("Nombre maximal de client déjà atteint, request refusé\n");
       close(request);
+      // Libère le sémaphore si la connexion est refusée
+      sem_post(&sem_client);
     }
   }
 
+  // Libère les ressources
+  sem_destroy(&sem_client);
   close(dS);
   close(dS_file);
   printf("Fin du programme\n");

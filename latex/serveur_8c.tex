@@ -1,0 +1,265 @@
+\hypertarget{serveur_8c}{}\doxysection{serveur.\+c File Reference}
+\label{serveur_8c}\index{serveur.c@{serveur.c}}
+
+
+Programme serveur de chat multi-\/client.  
+
+
+{\ttfamily \#include $<$stdio.\+h$>$}\newline
+{\ttfamily \#include $<$sys/socket.\+h$>$}\newline
+{\ttfamily \#include $<$arpa/inet.\+h$>$}\newline
+{\ttfamily \#include $<$stdlib.\+h$>$}\newline
+{\ttfamily \#include $<$string.\+h$>$}\newline
+{\ttfamily \#include $<$pthread.\+h$>$}\newline
+{\ttfamily \#include $<$signal.\+h$>$}\newline
+{\ttfamily \#include $<$unistd.\+h$>$}\newline
+{\ttfamily \#include $<$semaphore.\+h$>$}\newline
+Include dependency graph for serveur.\+c\+:
+% FIG 0
+\doxysubsection*{Classes}
+\begin{DoxyCompactItemize}
+\item 
+struct \mbox{\hyperlink{structclient}{client}}
+\end{DoxyCompactItemize}
+\doxysubsection*{Macros}
+\begin{DoxyCompactItemize}
+\item 
+\#define \mbox{\hyperlink{serveur_8c_ad4d025ecf1bdbf8b244ca688df8e478d}{MSG\+\_\+\+SIZE}}~100
+\item 
+\#define \mbox{\hyperlink{serveur_8c_ab8ba2d8f79af5ca38005742bbc29a927}{MAX\+\_\+\+CLIENT}}~10
+\end{DoxyCompactItemize}
+\doxysubsection*{Functions}
+\begin{DoxyCompactItemize}
+\item 
+void \mbox{\hyperlink{serveur_8c_a9da174aed37c4e45ec014e7975a12c90}{ajout\+\_\+client}} (\mbox{\hyperlink{structclient}{client}} $\ast$nouveau\+\_\+client)
+\item 
+void \mbox{\hyperlink{serveur_8c_a12cb04535196c824f75c111d267e43f4}{retire\+\_\+client}} (int uid)
+\item 
+void \mbox{\hyperlink{serveur_8c_a15f061befddfbd746ec2d9ba895cb2a6}{send\+\_\+message}} (char $\ast$s, int uid)
+\item 
+void \mbox{\hyperlink{serveur_8c_a8a112f4a9421d67cf2e5ebefce942200}{send\+\_\+message\+\_\+id}} (char $\ast$s, int uid)
+\item 
+int \mbox{\hyperlink{serveur_8c_a6ece3b7d81959b5e2c6afe6d6af6be44}{check\+\_\+name}} (char $\ast$s)
+\item 
+int \mbox{\hyperlink{serveur_8c_a9d60059d48068044eb6d29bc785e649a}{check\+\_\+message}} (char $\ast$s)
+\item 
+char $\ast$$\ast$ \mbox{\hyperlink{serveur_8c_aef9b9f64eb06cadbf0b969b814799729}{get\+\_\+name\+\_\+and\+\_\+message}} (char $\ast$s)
+\item 
+void \mbox{\hyperlink{serveur_8c_a7998c252c2e35705e4b37ff9a8303e26}{send\+\_\+message\+\_\+priv}} (char $\ast$s, char $\ast$destinateur, int uid)
+\item 
+void \mbox{\hyperlink{serveur_8c_a445ff40631876472d436bac5d4784fed}{receive\+\_\+file}} (int client\+\_\+sock, char $\ast$filename)
+\item 
+int \mbox{\hyperlink{serveur_8c_a5f59c665e89ede127579ffdb76e58fa6}{taille\+\_\+recv}} (int uid)
+\item 
+void \mbox{\hyperlink{serveur_8c_aca41c711fc1184316814a05f29b40f62}{taille\+\_\+send}} (int uid, char $\ast$sortie)
+\item 
+void $\ast$ \mbox{\hyperlink{serveur_8c_a1e83f53db9f8cacd6e1ff400b6497d72}{new\+\_\+client}} (void $\ast$args)
+\item 
+\mbox{\Hypertarget{serveur_8c_a0ddf1224851353fc92bfbff6f499fa97}\label{serveur_8c_a0ddf1224851353fc92bfbff6f499fa97}} 
+int {\bfseries main} (int argc, char $\ast$argv\mbox{[}$\,$\mbox{]})
+\end{DoxyCompactItemize}
+\doxysubsection*{Variables}
+\begin{DoxyCompactItemize}
+\item 
+\mbox{\Hypertarget{serveur_8c_af8017edead795177ebccef0d1dd62b0f}\label{serveur_8c_af8017edead795177ebccef0d1dd62b0f}} 
+sem\+\_\+t {\bfseries sem\+\_\+client}
+\item 
+\mbox{\hyperlink{structclient}{client}} $\ast$ \mbox{\hyperlink{serveur_8c_a2336bdcb03c5b4b058623a4e59a3aaf0}{clients\+Tab}} \mbox{[}\mbox{\hyperlink{serveur_8c_ab8ba2d8f79af5ca38005742bbc29a927}{MAX\+\_\+\+CLIENT}}\mbox{]}
+\item 
+pthread\+\_\+mutex\+\_\+t \mbox{\hyperlink{serveur_8c_a6c7ad5171e35e799797e13ccae147668}{clients\+\_\+mutex}} = PTHREAD\+\_\+\+MUTEX\+\_\+\+INITIALIZER
+\end{DoxyCompactItemize}
+
+
+\doxysubsection{Detailed Description}
+Programme serveur de chat multi-\/client. 
+
+
+
+\doxysubsection{Macro Definition Documentation}
+\mbox{\Hypertarget{serveur_8c_ab8ba2d8f79af5ca38005742bbc29a927}\label{serveur_8c_ab8ba2d8f79af5ca38005742bbc29a927}} 
+\index{serveur.c@{serveur.c}!MAX\_CLIENT@{MAX\_CLIENT}}
+\index{MAX\_CLIENT@{MAX\_CLIENT}!serveur.c@{serveur.c}}
+\doxysubsubsection{\texorpdfstring{MAX\_CLIENT}{MAX\_CLIENT}}
+{\footnotesize\ttfamily \#define MAX\+\_\+\+CLIENT~10}
+
+Nombre max de clients \mbox{\Hypertarget{serveur_8c_ad4d025ecf1bdbf8b244ca688df8e478d}\label{serveur_8c_ad4d025ecf1bdbf8b244ca688df8e478d}} 
+\index{serveur.c@{serveur.c}!MSG\_SIZE@{MSG\_SIZE}}
+\index{MSG\_SIZE@{MSG\_SIZE}!serveur.c@{serveur.c}}
+\doxysubsubsection{\texorpdfstring{MSG\_SIZE}{MSG\_SIZE}}
+{\footnotesize\ttfamily \#define MSG\+\_\+\+SIZE~100}
+
+Taille max du message 
+
+\doxysubsection{Function Documentation}
+\mbox{\Hypertarget{serveur_8c_a9da174aed37c4e45ec014e7975a12c90}\label{serveur_8c_a9da174aed37c4e45ec014e7975a12c90}} 
+\index{serveur.c@{serveur.c}!ajout\_client@{ajout\_client}}
+\index{ajout\_client@{ajout\_client}!serveur.c@{serveur.c}}
+\doxysubsubsection{\texorpdfstring{ajout\_client()}{ajout\_client()}}
+{\footnotesize\ttfamily void ajout\+\_\+client (\begin{DoxyParamCaption}\item[{\mbox{\hyperlink{structclient}{client}} $\ast$}]{nouveau\+\_\+client }\end{DoxyParamCaption})}
+
+Ajoute un nouveau client au tableau 
+\begin{DoxyParams}{Parameters}
+{\em nouveau\+\_\+client} & Pointeur vers le nouveau client à ajouter \\
+\hline
+\end{DoxyParams}
+\mbox{\Hypertarget{serveur_8c_a9d60059d48068044eb6d29bc785e649a}\label{serveur_8c_a9d60059d48068044eb6d29bc785e649a}} 
+\index{serveur.c@{serveur.c}!check\_message@{check\_message}}
+\index{check\_message@{check\_message}!serveur.c@{serveur.c}}
+\doxysubsubsection{\texorpdfstring{check\_message()}{check\_message()}}
+{\footnotesize\ttfamily int check\+\_\+message (\begin{DoxyParamCaption}\item[{char $\ast$}]{s }\end{DoxyParamCaption})}
+
+Vérifie si le message est un message privé ou une commande /list ou /close 
+\begin{DoxyParams}{Parameters}
+{\em s} & Message à vérifier \\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+1 si c\textquotesingle{}est un message privé, 2 si c\textquotesingle{}est la commande /list, 3 si c\textquotesingle{}est la commande /close, sinon 0 
+\end{DoxyReturn}
+\mbox{\Hypertarget{serveur_8c_a6ece3b7d81959b5e2c6afe6d6af6be44}\label{serveur_8c_a6ece3b7d81959b5e2c6afe6d6af6be44}} 
+\index{serveur.c@{serveur.c}!check\_name@{check\_name}}
+\index{check\_name@{check\_name}!serveur.c@{serveur.c}}
+\doxysubsubsection{\texorpdfstring{check\_name()}{check\_name()}}
+{\footnotesize\ttfamily int check\+\_\+name (\begin{DoxyParamCaption}\item[{char $\ast$}]{s }\end{DoxyParamCaption})}
+
+Vérifie si un nom est déjà utilisé par un autre client 
+\begin{DoxyParams}{Parameters}
+{\em s} & Nom à vérifier \\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+1 si le nom est déjà utilisé, sinon 0 
+\end{DoxyReturn}
+\mbox{\Hypertarget{serveur_8c_aef9b9f64eb06cadbf0b969b814799729}\label{serveur_8c_aef9b9f64eb06cadbf0b969b814799729}} 
+\index{serveur.c@{serveur.c}!get\_name\_and\_message@{get\_name\_and\_message}}
+\index{get\_name\_and\_message@{get\_name\_and\_message}!serveur.c@{serveur.c}}
+\doxysubsubsection{\texorpdfstring{get\_name\_and\_message()}{get\_name\_and\_message()}}
+{\footnotesize\ttfamily char$\ast$$\ast$ get\+\_\+name\+\_\+and\+\_\+message (\begin{DoxyParamCaption}\item[{char $\ast$}]{s }\end{DoxyParamCaption})}
+
+Extrait le nom du destinataire et le message à envoyer 
+\begin{DoxyParams}{Parameters}
+{\em s} & Message contenant le nom du destinataire et le message \\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+Un tableau de deux chaînes de caractères contenant le nom du destinataire et le message 
+\end{DoxyReturn}
+\mbox{\Hypertarget{serveur_8c_a1e83f53db9f8cacd6e1ff400b6497d72}\label{serveur_8c_a1e83f53db9f8cacd6e1ff400b6497d72}} 
+\index{serveur.c@{serveur.c}!new\_client@{new\_client}}
+\index{new\_client@{new\_client}!serveur.c@{serveur.c}}
+\doxysubsubsection{\texorpdfstring{new\_client()}{new\_client()}}
+{\footnotesize\ttfamily void$\ast$ new\+\_\+client (\begin{DoxyParamCaption}\item[{void $\ast$}]{args }\end{DoxyParamCaption})}
+
+Fonction exécutée dans un thread séparé pour chaque client pour gérer la communication 
+\begin{DoxyParams}{Parameters}
+{\em args} & Arguments passés au thread \\
+\hline
+\end{DoxyParams}
+\mbox{\Hypertarget{serveur_8c_a445ff40631876472d436bac5d4784fed}\label{serveur_8c_a445ff40631876472d436bac5d4784fed}} 
+\index{serveur.c@{serveur.c}!receive\_file@{receive\_file}}
+\index{receive\_file@{receive\_file}!serveur.c@{serveur.c}}
+\doxysubsubsection{\texorpdfstring{receive\_file()}{receive\_file()}}
+{\footnotesize\ttfamily void receive\+\_\+file (\begin{DoxyParamCaption}\item[{int}]{client\+\_\+sock,  }\item[{char $\ast$}]{filename }\end{DoxyParamCaption})}
+
+Gère la réception de fichiers du client 
+\begin{DoxyParams}{Parameters}
+{\em client\+\_\+sock} & Socket du client \\
+\hline
+{\em filename} & Nom du fichier \\
+\hline
+\end{DoxyParams}
+\mbox{\Hypertarget{serveur_8c_a12cb04535196c824f75c111d267e43f4}\label{serveur_8c_a12cb04535196c824f75c111d267e43f4}} 
+\index{serveur.c@{serveur.c}!retire\_client@{retire\_client}}
+\index{retire\_client@{retire\_client}!serveur.c@{serveur.c}}
+\doxysubsubsection{\texorpdfstring{retire\_client()}{retire\_client()}}
+{\footnotesize\ttfamily void retire\+\_\+client (\begin{DoxyParamCaption}\item[{int}]{uid }\end{DoxyParamCaption})}
+
+Retire un client du tableau à l\textquotesingle{}aide de son identifiant 
+\begin{DoxyParams}{Parameters}
+{\em uid} & Identifiant unique du client à retirer \\
+\hline
+\end{DoxyParams}
+\mbox{\Hypertarget{serveur_8c_a15f061befddfbd746ec2d9ba895cb2a6}\label{serveur_8c_a15f061befddfbd746ec2d9ba895cb2a6}} 
+\index{serveur.c@{serveur.c}!send\_message@{send\_message}}
+\index{send\_message@{send\_message}!serveur.c@{serveur.c}}
+\doxysubsubsection{\texorpdfstring{send\_message()}{send\_message()}}
+{\footnotesize\ttfamily void send\+\_\+message (\begin{DoxyParamCaption}\item[{char $\ast$}]{s,  }\item[{int}]{uid }\end{DoxyParamCaption})}
+
+Envoie un message à tous les clients sauf au sender 
+\begin{DoxyParams}{Parameters}
+{\em s} & Message à envoyer \\
+\hline
+{\em uid} & Identifiant unique du sender \\
+\hline
+\end{DoxyParams}
+\mbox{\Hypertarget{serveur_8c_a8a112f4a9421d67cf2e5ebefce942200}\label{serveur_8c_a8a112f4a9421d67cf2e5ebefce942200}} 
+\index{serveur.c@{serveur.c}!send\_message\_id@{send\_message\_id}}
+\index{send\_message\_id@{send\_message\_id}!serveur.c@{serveur.c}}
+\doxysubsubsection{\texorpdfstring{send\_message\_id()}{send\_message\_id()}}
+{\footnotesize\ttfamily void send\+\_\+message\+\_\+id (\begin{DoxyParamCaption}\item[{char $\ast$}]{s,  }\item[{int}]{uid }\end{DoxyParamCaption})}
+
+Envoie un message à un client spécifique 
+\begin{DoxyParams}{Parameters}
+{\em s} & Message à envoyer \\
+\hline
+{\em uid} & Identifiant unique du destinataire \\
+\hline
+\end{DoxyParams}
+\mbox{\Hypertarget{serveur_8c_a7998c252c2e35705e4b37ff9a8303e26}\label{serveur_8c_a7998c252c2e35705e4b37ff9a8303e26}} 
+\index{serveur.c@{serveur.c}!send\_message\_priv@{send\_message\_priv}}
+\index{send\_message\_priv@{send\_message\_priv}!serveur.c@{serveur.c}}
+\doxysubsubsection{\texorpdfstring{send\_message\_priv()}{send\_message\_priv()}}
+{\footnotesize\ttfamily void send\+\_\+message\+\_\+priv (\begin{DoxyParamCaption}\item[{char $\ast$}]{s,  }\item[{char $\ast$}]{destinateur,  }\item[{int}]{uid }\end{DoxyParamCaption})}
+
+Envoie un message privé à un destinataire spécifique 
+\begin{DoxyParams}{Parameters}
+{\em s} & Message à envoyer \\
+\hline
+{\em destinateur} & Nom du destinataire \\
+\hline
+{\em uid} & Identifiant unique de l\textquotesingle{}envoyeur \\
+\hline
+\end{DoxyParams}
+\mbox{\Hypertarget{serveur_8c_a5f59c665e89ede127579ffdb76e58fa6}\label{serveur_8c_a5f59c665e89ede127579ffdb76e58fa6}} 
+\index{serveur.c@{serveur.c}!taille\_recv@{taille\_recv}}
+\index{taille\_recv@{taille\_recv}!serveur.c@{serveur.c}}
+\doxysubsubsection{\texorpdfstring{taille\_recv()}{taille\_recv()}}
+{\footnotesize\ttfamily int taille\+\_\+recv (\begin{DoxyParamCaption}\item[{int}]{uid }\end{DoxyParamCaption})}
+
+Gère la réception de la taille d\textquotesingle{}un message 
+\begin{DoxyParams}{Parameters}
+{\em uid} & Identifiant unique du client \\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+Taille du message 
+\end{DoxyReturn}
+\mbox{\Hypertarget{serveur_8c_aca41c711fc1184316814a05f29b40f62}\label{serveur_8c_aca41c711fc1184316814a05f29b40f62}} 
+\index{serveur.c@{serveur.c}!taille\_send@{taille\_send}}
+\index{taille\_send@{taille\_send}!serveur.c@{serveur.c}}
+\doxysubsubsection{\texorpdfstring{taille\_send()}{taille\_send()}}
+{\footnotesize\ttfamily void taille\+\_\+send (\begin{DoxyParamCaption}\item[{int}]{uid,  }\item[{char $\ast$}]{sortie }\end{DoxyParamCaption})}
+
+Gère l\textquotesingle{}envoi de la taille d\textquotesingle{}un message 
+\begin{DoxyParams}{Parameters}
+{\em uid} & Identifiant unique du client \\
+\hline
+{\em sortie} & Chaîne de caractères à envoyer \\
+\hline
+\end{DoxyParams}
+
+
+\doxysubsection{Variable Documentation}
+\mbox{\Hypertarget{serveur_8c_a6c7ad5171e35e799797e13ccae147668}\label{serveur_8c_a6c7ad5171e35e799797e13ccae147668}} 
+\index{serveur.c@{serveur.c}!clients\_mutex@{clients\_mutex}}
+\index{clients\_mutex@{clients\_mutex}!serveur.c@{serveur.c}}
+\doxysubsubsection{\texorpdfstring{clients\_mutex}{clients\_mutex}}
+{\footnotesize\ttfamily pthread\+\_\+mutex\+\_\+t clients\+\_\+mutex = PTHREAD\+\_\+\+MUTEX\+\_\+\+INITIALIZER}
+
+Mutex pour synchroniser l\textquotesingle{}accès concurrentiel aux données des clients \mbox{\Hypertarget{serveur_8c_a2336bdcb03c5b4b058623a4e59a3aaf0}\label{serveur_8c_a2336bdcb03c5b4b058623a4e59a3aaf0}} 
+\index{serveur.c@{serveur.c}!clientsTab@{clientsTab}}
+\index{clientsTab@{clientsTab}!serveur.c@{serveur.c}}
+\doxysubsubsection{\texorpdfstring{clientsTab}{clientsTab}}
+{\footnotesize\ttfamily \mbox{\hyperlink{structclient}{client}}$\ast$ clients\+Tab\mbox{[}\mbox{\hyperlink{serveur_8c_ab8ba2d8f79af5ca38005742bbc29a927}{MAX\+\_\+\+CLIENT}}\mbox{]}}
+
+Tableau de tous les clients connectés 
