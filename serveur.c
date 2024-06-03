@@ -741,7 +741,6 @@ void *new_client(void *args)
           {
             for (int j = 0; j < c->nb_clients; ++j)
             {
-              printf("%d",c->clients[j]->id_client);
               if (c->clients[j] != data_client)
               {
                 send_message(message, c->clients[j]->id_client);
