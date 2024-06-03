@@ -2,6 +2,7 @@
     "C_Cpp.errorSquiggles": "disabled",
     "files.associations": {
         "*.swift": "swift",
-        "typeinfo": "c"
+        "typeinfo": "c",
+        "cmath": "c"
     }
 }
