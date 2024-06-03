@@ -152,6 +152,10 @@ int check_message(char *s)
   {
     return 3;
   }
+  else if (strcmp(command1, "/file") == 0) // Vérifie si c'est /file
+  {
+    return 5;
+  }
   else
   {
     return 0;
@@ -505,15 +509,10 @@ void *new_client(void *args) {
 
     // Réception d'un message du client
     int receive = recv(data_client->sockID, message, MSG_SIZE, 0);
-    int received_file;
-    int receive_file_ask = recv(data_client->sockID_file, &received_file, sizeof(int), 0);
-    if(received_file == 0) {
-      printf("Demande d'envoi de fichier\n");
-    } else {
-      printf("Demande de reception de fichier\n");
-    }
 
-    printf("Demande : %i\n", received_file);
+    int received_file;
+    int receive_file_ask;
+
 
     if (receive > 0)
     { // Messages normaux ou privés
@@ -576,6 +575,17 @@ void *new_client(void *args) {
           // Close the server
           // Assuming you have a function close_server that closes the server
           // close_server();
+        }
+        else if (check_message(message) == 5) // c'est la commande /file 
+        {
+          receive_file_ask = recv(data_client->sockID_file, &received_file, sizeof(int), 0);
+          if(received_file == 0) {
+            printf("Demande d'envoi de fichier\n");
+          } else {
+            printf("Demande de reception de fichier\n");
+          }
+
+          printf("Demande : %i\n", received_file);
         }
         // ------------------- Fin modification Aloïs ------------------
         else
