@@ -353,9 +353,109 @@ void send_message_priv(char *s, char *destinateur, int uid)
 // }
 // ----------------- Fin modification Aloïs ----------------
 
+void send_file(int client_sock) {
+
+  char filename[256];
+  int name_size;
+  FILE *file;
+
+  #define FILE_DIR "./server_folder"
+
+  // Recevoir la taille du nom de fichier
+  if (recv(client_sock, &name_size, sizeof(int), 0) <= 0) {
+      perror("Erreur lors de la réception de la taille du nom de fichier");
+      return;
+  }
+  printf("name size : %i\n", name_size);
+
+  // Recevoir le nom de fichier
+  if (recv(client_sock, filename, name_size, 0) <= 0) {
+      perror("Erreur lors de la réception du nom de fichier");
+      return;
+  }
+  filename[name_size] = '\0';  // Assurez-vous que le nom de fichier est bien terminé par un caractère nul
+  printf("filename : %s\n", filename);
+
+  // Construire le chemin complet du fichier
+  char filepath[512];
+  snprintf(filepath, sizeof(filepath), "%s/%s", FILE_DIR, filename);
+  printf("filepath : %s\n", filepath);
+
+  // Ouvrir le fichier en mode écriture binaire
+  file = fopen(filepath, "rb");
+  int tosend;
+
+  if (!file) {
+    tosend = 0;
+    send(client_sock, &tosend, sizeof(int), 0);
+    perror("Erreur lors de l'ouverture du fichier pour écriture");
+    return;
+  } else {
+    tosend = 1;
+    send(client_sock, &tosend, sizeof(int), 0);
+  }
+
+  printf("%s\n", "Nom deja existant");
+
+  // Obteint la taille du fichier
+   if (fseek(file, 0, SEEK_END) != 0) {
+        perror("Erreur lors de la recherche de la fin du fichier");
+        fclose(file);
+        return;
+    }
+
+    // Obtenir la position actuelle du pointeur de fichier (taille du fichier)
+    int file_size = ftell(file);
+    if (file_size == -1) {
+        perror("Erreur lors de l'obtention de la taille du fichier");
+        fclose(file);
+        return;
+    }
+
+    // Revenir au début du fichier
+    if (fseek(file, 0, SEEK_SET) != 0) {
+        perror("Erreur lors du retour au début du fichier");
+        fclose(file);
+        return;
+    }
+  printf("File size : %i\n", file_size);
+
+  // Envoie la taille du fichier
+  send(client_sock, &file_size, sizeof(int), 0);
+
+  // Envoie le contenu du fichier
+  char buffer[1024];
+  size_t bytes_read;
+  ssize_t bytes_sent;
+  size_t total_bytes_sent;
+
+  while ((bytes_read = fread(buffer, 1, sizeof(buffer), file)) > 0) {
+      total_bytes_sent = 0;
+      while (total_bytes_sent < bytes_read) {
+          bytes_sent = send(client_sock, buffer + total_bytes_sent, bytes_read - total_bytes_sent, 0);
+          if (bytes_sent == -1) {
+              perror("Erreur pendant l'envoi du fichier");
+              fclose(file);
+              return;
+          } else {
+            printf("Envoyé: %zu/%i octets\n", total_bytes_sent, file_size);
+          }
+          total_bytes_sent += bytes_sent;
+      }
+  }
+
+  // Ferme le fichier
+  fclose(file);
+  printf("Fichier envoyé avec succès.\n");
+}
+
 //-----------------MODIFICATION POOMEDY------------------------------
-// Gére la réception de fichier du client
-void receive_file(int client_sock, char *filename)
+/**
+* Gère la réception de fichiers du client
+* @param client_sock Socket du client
+* @param filename Nom du fichier
+*/
+void receive_file(int client_sock)
 {
   int name_size;
   recv(client_sock, &name_size, sizeof(int), 0);
