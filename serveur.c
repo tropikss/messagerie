@@ -22,6 +22,7 @@
 //------------------------------------------
 static unsigned int nb_client = 0; /**< Nombre de clients connectés */
 static int uid = 10;               /**< Taille des identifiants(unique) de chaque client */
+int dS; // Je met la socket du serveur en global pour pouvoir l'utiliser dans close_server()
 sem_t sem_client;
 
 /**
@@ -412,11 +413,13 @@ void taille_send(int uid, char *sortie)
 
 // ------------------- Modification Aloïs ------------------
 // Fonction prototype
-void close_server()
+void close_server();
     // ----------------- Fin modification Aloïs ----------------
 
-    // Gère la communication entre les clients (envoie et réception)
-    // Executer dans un thread séparé pour chaque client
+/*
+* Fonction exécutée dans un thread séparé pour chaque client pour gérer la communication
+* @param args Arguments passés au thread
+*/
     void *new_client(void *args)
 {
   char *file = (char *)malloc(sizeof(char) * 256); // fichier entrant
@@ -823,7 +826,7 @@ void close_server()
   {
     if (clientsTab[i])
     {
-      if (close(clientsTab[i]->socket) == -1)
+      if (close(clientsTab[i]->sockID) == -1)
       {
         perror("Failed to close client socket");
       }
